@@ -1,0 +1,54 @@
+{
+  "schema": "zynnova.standalone-rebrand-audit/1.0",
+  "observed_at": "2026-08-17",
+  "framework": "ZynNova",
+  "project_name": "zynnova",
+  "top_level_package": "src/zynnova",
+  "source_preservation": {
+    "source_snapshot_files": 1096,
+    "standalone_files_before_this_report": 1110,
+    "mapped_source_files": 1096,
+    "missing_mapped_files": [],
+    "merged_targets": [
+      {
+        "target": "src/zynnova/__init__.py",
+        "source_initializer_count": 2,
+        "reason": "The retained scientific package initializer and difficult-task initializer were combined into one standalone public namespace."
+      }
+    ],
+    "note": "Two package initializers were intentionally merged into the single standalone package initializer."
+  },
+  "namespace_cleanup": {
+    "legacy_named_paths": [],
+    "legacy_text_or_binary_occurrences": [],
+    "duplicated_package_namespace_occurrences": []
+  },
+  "verification": {
+    "python_package_compilation": true,
+    "targeted_tests_returncode": 0,
+    "targeted_tests_summary": ".............                                                            [100%]\n13 passed in 1.88s",
+    "cli_status_returncode": 0,
+    "static_audit_passed": true,
+    "notebook_json_files_validated": 358,
+    "cmake_configuration_without_optional_native_dependencies": "passed",
+    "portable_cpp_translation_units_syntax_checked": 6,
+    "retained_public_modules_imported": [
+      "zynnova",
+      "zynnova.structure",
+      "zynnova.data",
+      "zynnova.dft",
+      "zynnova.dynamics",
+      "zynnova.ml",
+      "zynnova.physics",
+      "zynnova.visualization",
+      "zynnova.zynsim",
+      "zynnova.core",
+      "zynnova.geometry",
+      "zynnova.zynmorph",
+      "zynnova.zynvista",
+      "zynnova.zynform",
+      "zynnova.zynvox"
+    ]
+  },
+  "passed": true
+}

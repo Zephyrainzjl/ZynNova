@@ -1,0 +1,2 @@
+/mnt/data/ZynNova_Full/build-config-check/CMakeFiles/edit_cache.dir
+/mnt/data/ZynNova_Full/build-config-check/CMakeFiles/rebuild_cache.dir

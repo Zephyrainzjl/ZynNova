@@ -1,0 +1,138 @@
+{
+  "schema": "zynnova.source-lock/1.0",
+  "observed_at": "2026-08-17",
+  "policy": {
+    "redistribute_source": false,
+    "redistribute_weights": false,
+    "pin_revision_at_install": true,
+    "verify_code_and_model_terms_separately": true
+  },
+  "sources": [
+    {
+      "id": "mapanything",
+      "module": "zynvista",
+      "repository": "https://github.com/facebookresearch/map-anything",
+      "default_branch": "main",
+      "adapter": "MapAnythingBackend",
+      "license": "Apache-2.0 code; choose Apache-2.0 or CC-BY-NC-4.0 model explicitly",
+      "revision": null
+    },
+    {
+      "id": "hy-world-2",
+      "module": "zynvista",
+      "repository": "https://github.com/Tencent-Hunyuan/HY-World-2.0",
+      "default_branch": "main",
+      "adapter": "HYWorld2GenerationBackend / HYWorld2ReconstructionBackend",
+      "license": "upstream custom code/model terms; verify before use",
+      "revision": null
+    },
+    {
+      "id": "instruct-gs2gs",
+      "module": "zynvista",
+      "repository": "https://github.com/cvachha/instruct-gs2gs",
+      "default_branch": "main",
+      "adapter": "InstructGS2GSStyle",
+      "license": "MIT code plus model/dependency terms",
+      "revision": null
+    },
+    {
+      "id": "stylos",
+      "module": "zynvista",
+      "repository": "https://github.com/HanzhouLiu/StylOS",
+      "default_branch": "main",
+      "adapter": "ExternalSceneStyle",
+      "license": "verify upstream code, model, and dependency terms before use",
+      "revision": null
+    },
+    {
+      "id": "stylegaussian",
+      "module": "zynvista",
+      "repository": "https://github.com/Kunhao-Liu/StyleGaussian",
+      "default_branch": "main",
+      "adapter": "ExternalSceneStyle",
+      "license": "verify upstream code, model, and dependency terms before use",
+      "revision": null
+    },
+    {
+      "id": "pixal3d",
+      "module": "zynform",
+      "repository": "https://github.com/TencentARC/Pixal3D",
+      "default_branch": "main",
+      "adapter": "Pixal3DBackend",
+      "license": "MIT project; third-party NOTICE terms also apply",
+      "revision": null
+    },
+    {
+      "id": "trellis2",
+      "module": "zynform",
+      "repository": "https://github.com/microsoft/TRELLIS.2",
+      "default_branch": "main",
+      "adapter": "Trellis2Backend",
+      "license": "MIT model/code; separate renderer dependency terms",
+      "revision": null
+    },
+    {
+      "id": "meanvc2",
+      "module": "zynvox",
+      "repository": "https://github.com/ASLP-lab/MeanVC2",
+      "default_branch": "main",
+      "adapter": "MeanVC2Backend",
+      "license": "Apache-2.0",
+      "revision": null
+    },
+    {
+      "id": "xvc",
+      "module": "zynvox",
+      "repository": "https://github.com/Jerrister/X-VC",
+      "default_branch": "main",
+      "adapter": "XVCBackend",
+      "license": "MIT",
+      "revision": null
+    },
+    {
+      "id": "cosyvoice3",
+      "module": "zynvox",
+      "repository": "https://github.com/QwenAudio/CosyVoice",
+      "default_branch": "main",
+      "adapter": "CosyVoice3Backend",
+      "license": "Apache-2.0 code; verify model terms",
+      "revision": null
+    },
+    {
+      "id": "indextts25",
+      "module": "zynvox",
+      "repository": "https://github.com/index-tts/index-tts",
+      "default_branch": "main",
+      "adapter": "IndexTTS25Backend",
+      "license": "bilibili Model Use License Agreement and disclaimer",
+      "revision": null
+    },
+    {
+      "id": "gpt-sovits",
+      "module": "zynvox",
+      "repository": "https://github.com/RVC-Boss/GPT-SoVITS",
+      "default_branch": "main",
+      "adapter": "GPTSoVITSAPIBackend (comparison baseline)",
+      "license": "MIT code plus model/dependency terms",
+      "revision": null
+    },
+    {
+      "id": "discrete-spatial-diffusion",
+      "module": "zynmorph",
+      "repository": "https://github.com/lanl/DiscreteSpatialDiffusion",
+      "default_branch": "main",
+      "adapter": "ExternalMicrostructureBackend",
+      "license": "LANL repository notice; legal review recommended",
+      "revision": null
+    },
+    {
+      "id": "pores4thought",
+      "module": "zynmorph",
+      "repository": "https://github.com/agayonlombardo/pores4thought",
+      "default_branch": "master",
+      "adapter": "reference/training-data compatibility",
+      "license": "no standard repository license detected; do not redistribute without permission",
+      "revision": null
+    }
+  ]
+}

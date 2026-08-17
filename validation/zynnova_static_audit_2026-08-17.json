@@ -1,0 +1,53 @@
+{
+  "schema": "zynnova.static-audit/1.0",
+  "observed_at": "2026-08-17",
+  "python_files": 108,
+  "python_lines": 11951,
+  "syntax_errors": [],
+  "shell_true": [],
+  "os_system": [],
+  "subprocess_popen": [],
+  "builtin_eval_calls": [],
+  "builtin_exec_calls": [],
+  "unsafe_pickle_load_calls": [],
+  "hardcoded_user_absolute_paths": [],
+  "source_lock": {
+    "source_count": 14,
+    "unique_ids": true,
+    "all_https": true,
+    "ids": [
+      "mapanything",
+      "hy-world-2",
+      "instruct-gs2gs",
+      "stylos",
+      "stylegaussian",
+      "pixal3d",
+      "trellis2",
+      "meanvc2",
+      "xvc",
+      "cosyvoice3",
+      "indextts25",
+      "gpt-sovits",
+      "discrete-spatial-diffusion",
+      "pores4thought"
+    ]
+  },
+  "pyproject": {
+    "parsed": true,
+    "zynnova_optional_groups": [
+      "zynnova",
+      "zynnova-fem",
+      "zynnova-geometry",
+      "zynnova-ml",
+      "zynnova-morph",
+      "zynnova-morph-train",
+      "zynnova-object",
+      "zynnova-scene",
+      "zynnova-ui",
+      "zynnova-voice",
+      "zynnova-voice-eval"
+    ],
+    "unknown_registered_extras": []
+  },
+  "passed": true
+}

@@ -1,0 +1,15 @@
+name: zynnova-core
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24
+  - numpy>=1.26
+  - scipy>=1.10
+  - pillow>=10
+  - trimesh>=4
+  - meshio>=5.3
+  - python-soundfile>=0.12
+  - pytest>=8
+  - pip:
+      - gradio>=4.44

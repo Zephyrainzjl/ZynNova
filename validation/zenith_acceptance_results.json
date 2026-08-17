@@ -1,0 +1,51 @@
+{
+  "architecture": "zynforge-zenith",
+  "default_policy": "evidence-gated",
+  "paired_training": {
+    "seeds": [7, 123, 991, 2027, 31, 73, 509, 4099],
+    "baseline": {
+      "parameters": 8767,
+      "test_energy_mae_per_atom": 0.21395212970674038,
+      "test_force_mae": 0.21643653325736523,
+      "test_loss": 0.18944391049444675,
+      "train_energy_mae_per_atom": 0.16441189497709274,
+      "train_force_mae": 0.11944357957690954,
+      "train_loss_ratio": 0.11058905883118811
+    },
+    "accepted_default": {
+      "parameters": 8767,
+      "test_energy_mae_per_atom": 0.21395212970674038,
+      "test_force_mae": 0.21643653325736523,
+      "test_loss": 0.18944391049444675,
+      "train_energy_mae_per_atom": 0.16441189497709274,
+      "train_force_mae": 0.11944357957690954,
+      "train_loss_ratio": 0.11058905883118811
+    },
+    "invariant_gated_ffn_rejected_as_default": {
+      "parameters": 9007,
+      "test_energy_mae_per_atom": 0.21491863392293453,
+      "test_force_mae": 0.21481745317578316,
+      "test_loss": 0.18867283128201962,
+      "train_energy_mae_per_atom": 0.1648762784898281,
+      "train_force_mae": 0.11843536049127579,
+      "train_loss_ratio": 0.11010941219892234
+    }
+  },
+  "compile_cpu": {
+    "cold_start_seconds": 75.47,
+    "steady_compiled_seconds": 0.009449,
+    "steady_eager_seconds": 0.007746,
+    "energy_max_abs_difference": 0.0,
+    "force_max_abs_difference": 1.27e-11,
+    "decision": "default_off"
+  },
+  "source_regression": {
+    "passed": 58,
+    "failed": 0
+  },
+  "material_training": {
+    "matpes_20000_structures_30_epochs_executed_here": false,
+    "reason": "target dataset cache and user accelerator were not available",
+    "notebook_runs_full_training": true
+  }
+}

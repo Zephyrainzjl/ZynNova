@@ -1,0 +1,53 @@
+from .layout import AutoLayoutEngine
+from .planner import CallableScenePlanner, OpenAICompatibleScenePlanner, RuleBasedPlanner, ScenePlanner
+from .schema import (
+    Bounds,
+    ChartElement,
+    ChartKind,
+    ChartSeries,
+    ColorRef,
+    ConnectorElement,
+    ConnectorKind,
+    Element,
+    ElementKind,
+    FigureScene,
+    ImageElement,
+    ShapeElement,
+    ShapeKind,
+    ShapeStyle,
+    TextElement,
+    TextStyle,
+)
+from .serialization import scene_from_dict, scene_from_json, scene_to_dict, scene_to_json
+from .validation import SceneIssue, SceneValidationReport, validate_scene
+
+__all__ = [
+    "AutoLayoutEngine",
+    "Bounds",
+    "CallableScenePlanner",
+    "ChartElement",
+    "ChartKind",
+    "ChartSeries",
+    "ColorRef",
+    "ConnectorElement",
+    "ConnectorKind",
+    "Element",
+    "ElementKind",
+    "FigureScene",
+    "ImageElement",
+    "OpenAICompatibleScenePlanner",
+    "RuleBasedPlanner",
+    "SceneIssue",
+    "ScenePlanner",
+    "SceneValidationReport",
+    "ShapeElement",
+    "ShapeKind",
+    "ShapeStyle",
+    "TextElement",
+    "TextStyle",
+    "scene_from_dict",
+    "scene_from_json",
+    "scene_to_dict",
+    "scene_to_json",
+    "validate_scene",
+]

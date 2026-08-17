@@ -1,0 +1,167 @@
+{
+  "schema": "zivar-source-lock-0.2.0",
+  "architecture_revision": "zivar-variational-electrospin-2",
+  "numerics_revision": "variational-scf-pme.1",
+  "public_version": "0.2.0",
+  "provenance_policy": {
+    "implementation": "independent ZynNova implementation",
+    "third_party_source_copied": false,
+    "third_party_weights_or_datasets_redistributed": false,
+    "reference_only_projects_are_runtime_dependencies": false
+  },
+  "runtime_compatibility": {
+    "torch": ">=2.2,!=2.4.1",
+    "e3nn": "==0.4.4",
+    "mace-torch": "==0.3.16"
+  },
+  "external_build_dependencies": [
+    {
+      "name": "Kokkos",
+      "repository": "https://github.com/kokkos/kokkos",
+      "license": "BSD-3-Clause",
+      "validated_version": "4.3.1",
+      "validated_tag": "4.3.01",
+      "validated_commit": "6ecdf605e0f7639adec599d25cf0e206d7b8f9f5",
+      "version_policy": "consumer builds resolve find_package(Kokkos CONFIG REQUIRED); release evidence must record the resolved version",
+      "relationship": "public execution and memory APIs for the optional independent matrix-free C++ core"
+    }
+  ],
+  "official_references": [
+    {
+      "name": "MACE",
+      "repository": "https://github.com/ACEsuit/mace",
+      "version": "0.3.16",
+      "tag": "v0.3.16",
+      "commit": "4d2da09413ac1407f37cdbb6b81fa28e4c15655e",
+      "license": "MIT",
+      "relationship": "optional runtime backbone and design reference",
+      "algorithm_locations": [
+        "mace/modules/models.py",
+        "mace/modules/blocks.py",
+        "mace/modules/extensions.py::PolarMACE"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/backbones/mace.py",
+        "src/zynnova/ml/zivar/backbones/base.py",
+        "src/zynnova/ml/zivar/backbones/__init__.py"
+      ],
+      "copying_status": "called through public Python APIs; no MACE source or weights are vendored"
+    },
+    {
+      "name": "e3nn",
+      "repository": "https://github.com/e3nn/e3nn",
+      "version": "0.4.4",
+      "tag": "0.4.4",
+      "commit": "5c0d2fdcc719190e40a887ddb5bd5790e196ba5f",
+      "license": "MIT",
+      "relationship": "direct runtime dependency for O(3) representation operations",
+      "algorithm_locations": [
+        "e3nn.o3.Irreps",
+        "e3nn.o3.TensorProduct",
+        "e3nn.o3.spherical_harmonics"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/backbones/mace.py",
+        "src/zynnova/ml/zivar/backbones/zodiac.py"
+      ],
+      "copying_status": "used through the installed public API; no e3nn source is vendored"
+    },
+    {
+      "name": "torch-pme",
+      "repository": "https://github.com/lab-cosmo/torch-pme",
+      "version": "0.4.0",
+      "tag": "v0.4.0",
+      "commit": "bc655e4d005795234aff4ca182f958bc799c8e62",
+      "license": "BSD-3-Clause",
+      "relationship": "reference-only comparison for differentiable Ewald, PME, and P3M APIs",
+      "algorithm_locations": [
+        "torchpme.EwaldCalculator",
+        "torchpme.PMECalculator",
+        "torchpme.P3MCalculator"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/ewald_reference.py",
+        "src/zynnova/ml/zivar/mesh.py",
+        "src/zynnova/ml/zivar/pme.py"
+      ],
+      "copying_status": "not imported by ZIVAR and no torch-pme source was copied"
+    },
+    {
+      "name": "NequIP",
+      "repository": "https://github.com/mir-group/nequip",
+      "version": "0.7.0",
+      "tag": "v0.7.0",
+      "commit": "b513fdf19f4f7665fa26fea99a92d8bba66f8f43",
+      "license": "MIT",
+      "relationship": "reference-only comparison for equivariant model protocols and deployment",
+      "algorithm_locations": [
+        "nequip.model",
+        "nequip.nn",
+        "nequip.data.AtomicDataDict"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/backbones/base.py",
+        "src/zynnova/ml/zivar/backbones/__init__.py",
+        "src/zynnova/ml/zivar/types.py"
+      ],
+      "copying_status": "not imported by ZIVAR and no NequIP source or weights were copied"
+    },
+    {
+      "name": "Allegro",
+      "repository": "https://github.com/mir-group/allegro",
+      "version": "0.4.0",
+      "tag": "v0.4.0",
+      "commit": "0ffb66c8de751a506f168f4ea6838760a5d938a5",
+      "license": "MIT",
+      "relationship": "reference-only comparison for scalable equivariant local backbones",
+      "algorithm_locations": [
+        "allegro.model.AllegroModel",
+        "allegro.nn.Allegro_Module"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/backbones/base.py",
+        "src/zynnova/ml/zivar/backbones/__init__.py"
+      ],
+      "copying_status": "not imported by ZIVAR and no Allegro source or weights were copied"
+    },
+    {
+      "name": "LAMMPS",
+      "repository": "https://github.com/lammps/lammps",
+      "version": "30Mar2026",
+      "tag": "patch_30Mar2026",
+      "commit": "fc6a61720c42604466e626763af66feefde23646",
+      "license": "GPL-2.0",
+      "relationship": "official reference for fix external, ML-IAP, QEq, and Kokkos integration contracts",
+      "algorithm_locations": [
+        "src/fix_external.cpp",
+        "src/ML-IAP",
+        "src/QEQ/fix_qeq_reaxff.cpp",
+        "src/KOKKOS"
+      ],
+      "zivar_locations": [
+        "src/zynnova/ml/zivar/lammps.py",
+        "cpp/include/zynnova/zivar/matrix_free.hpp",
+        "cpp/src/zivar/matrix_free.cpp"
+      ],
+      "copying_status": "no LAMMPS source is vendored; the Python reference bridge uses a public callback contract and the independent Kokkos core is not a LAMMPS pair style"
+    }
+  ],
+  "local_lammps_observation": {
+    "audited_date": "2026-08-17",
+    "binary": "/home/zephyrain/software/lammps-mliap-gpu-nompi/bin/lmp",
+    "reported_release": "LAMMPS 30 Mar 2026 Development",
+    "reported_git_description": "develop / patch_30Mar2026-1211-g5af1318e9e",
+    "execution_model": "MPI STUBS/NOMPI; Kokkos CUDA and OpenMP",
+    "packages_observed": [
+      "KOKKOS",
+      "ML-IAP",
+      "ML-PACE",
+      "ML-SNAP",
+      "PYTHON"
+    ],
+    "spin_package_observed": false,
+    "non_kokkos_run0_observed": "passed",
+    "kokkos_gpu_run0_observed": "failed: cudaErrorInsufficientDriver (CUDA runtime newer than the active driver)",
+    "relationship_to_lock": "environment observation only; this development build is not represented as the patch_30Mar2026 reference commit"
+  }
+}
