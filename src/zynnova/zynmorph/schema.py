@@ -162,6 +162,8 @@ class GenerationConfig:
     output_directory: str = "zynnova_runs/zynmorph"
     export_volume_formats: tuple[str, ...] = ("npz",)
     export_mesh_formats: tuple[str, ...] = ("vtk", "msh", "inp")
+    mesh_backend: str = "tetgen"
+    tetgen_options: Mapping[str, object] = field(default_factory=dict)
     maximum_tetrahedra: int = 12_000_000
 
     def __post_init__(self) -> None:
@@ -171,6 +173,17 @@ class GenerationConfig:
             raise ConfigurationError("temperature must be positive")
         if self.maximum_tetrahedra < 6:
             raise ConfigurationError("maximum_tetrahedra must be at least six")
+        mesh_backend = str(self.mesh_backend).strip().lower().replace("_", "-")
+        mesh_backend = {
+            "voxel": "structured",
+            "six-tet": "structured",
+            "adaptive": "tetgen",
+            "tetgen-1.6": "tetgen",
+        }.get(mesh_backend, mesh_backend)
+        if mesh_backend not in {"structured", "tetgen"}:
+            raise ConfigurationError("mesh_backend must be 'structured' or 'tetgen'")
+        object.__setattr__(self, "mesh_backend", mesh_backend)
+        object.__setattr__(self, "tetgen_options", dict(self.tetgen_options))
         volume_formats = tuple(str(item).strip().lower().lstrip(".") for item in self.export_volume_formats)
         unsupported_volume = sorted(set(volume_formats) - {"npz", "npy", "raw", "tif", "tiff"})
         if unsupported_volume:
@@ -178,10 +191,22 @@ class GenerationConfig:
         if not volume_formats:
             raise ConfigurationError("at least one volume export format is required")
         object.__setattr__(self, "export_volume_formats", volume_formats)
+        mesh_formats = tuple(
+            "mphtxt" if str(item).strip().lower().lstrip(".") == "comsol"
+            else str(item).strip().lower().lstrip(".")
+            for item in self.export_mesh_formats
+        )
+        unsupported_mesh = sorted(
+            set(mesh_formats) - {"vtk", "msh", "inp", "npz", "mphtxt"}
+        )
+        if unsupported_mesh:
+            raise ConfigurationError(f"unsupported FEM mesh formats: {unsupported_mesh}")
+        if not mesh_formats:
+            raise ConfigurationError("at least one FEM mesh export format is required")
         object.__setattr__(
             self,
             "export_mesh_formats",
-            tuple(str(item).strip().lower().lstrip(".") for item in self.export_mesh_formats),
+            tuple(dict.fromkeys(mesh_formats)),
         )
 
 

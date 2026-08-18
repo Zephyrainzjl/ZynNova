@@ -42,6 +42,19 @@ def reconstruct_from_slices(
 
     if not observations:
         raise ValueError("at least one SliceObservation is required")
+    if not np.isfinite(prior_weight) or prior_weight < 0.0:
+        raise ValueError("prior_weight must be finite and non-negative")
+    allowed_phases = set(condition.phases)
+    for observation in observations:
+        unknown = sorted(
+            int(value)
+            for value in np.unique(observation.labels)
+            if int(value) not in allowed_phases
+        )
+        if unknown:
+            raise ValueError(
+                f"slice observation contains phases absent from the condition: {unknown}"
+            )
     generated = SpectralConditionalGenerator().generate(condition).volume
     phases = condition.phases
     phase_index = {phase: index for index, phase in enumerate(phases)}
@@ -49,11 +62,15 @@ def reconstruct_from_slices(
     for index, phase in enumerate(phases):
         votes[index] += prior_weight * (generated.labels == phase)
     for observation in observations:
-        resized = _resize_nearest_2d(observation.labels, _plane_shape(condition.shape, observation.axis))
+        resized = _resize_nearest_2d(
+            observation.labels,
+            _plane_shape(condition.shape, observation.axis),
+        )
         expanded = np.expand_dims(resized, axis=observation.axis)
-        repeats = list(condition.shape)
-        repeats[observation.axis] = 1
-        expanded = np.tile(expanded, repeats)
+        # The resized observation already spans the two in-plane dimensions.
+        # Broadcast only along the missing normal axis; tiling by the full
+        # three-dimensional shape would multiply the in-plane dimensions too.
+        expanded = np.broadcast_to(expanded, condition.shape)
         for phase in np.unique(expanded):
             phase_id = int(phase)
             if phase_id in phase_index:

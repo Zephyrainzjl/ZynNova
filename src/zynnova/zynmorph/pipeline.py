@@ -13,6 +13,7 @@ from .meshing import FEMMeshResult, export_fem_mesh, mesh_microstructure
 from .metrics import MicrostructureMetrics, analyze_microstructure
 from .registry import BACKENDS
 from .schema import GenerationConfig, MicrostructureCondition
+from .tetgen import TetGenMeshingConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,9 +67,20 @@ def run_zynmorph(
             achieved_counts=generation.achieved_counts,
             percolation=generation.metadata.get("percolation_repairs", []),
         )
-        manifest.event("meshing_started", voxels=generation.volume.labels.size)
+        manifest.event(
+            "meshing_started",
+            voxels=generation.volume.labels.size,
+            mesh_backend=resolved.mesh_backend,
+        )
+        tetgen_config = (
+            TetGenMeshingConfig(**dict(resolved.tetgen_options))
+            if resolved.mesh_backend == "tetgen"
+            else None
+        )
         fem = mesh_microstructure(
             generation.volume,
+            method=resolved.mesh_backend,
+            tetgen_config=tetgen_config,
             maximum_tetrahedra=resolved.maximum_tetrahedra,
         )
         fem = export_fem_mesh(fem, root / "mesh", formats=resolved.export_mesh_formats)
@@ -91,6 +103,7 @@ def run_zynmorph(
             ".vtk": "model/vnd.vtk",
             ".msh": "application/x-gmsh",
             ".inp": "text/plain",
+            ".mphtxt": "text/plain",
             ".ply": "model/ply",
             ".stl": "model/stl",
         }
@@ -105,6 +118,7 @@ def run_zynmorph(
             tetrahedra=int(fem.mesh.tetrahedra.shape[0]),
             inverted=int(fem.quality.inverted_cells),
             degenerate=int(fem.quality.degenerate_cells),
+            mesh_backend=fem.backend,
         )
         manifest.finish()
     except Exception as exc:

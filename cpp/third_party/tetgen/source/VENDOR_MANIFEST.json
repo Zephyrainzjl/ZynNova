@@ -1,0 +1,27 @@
+{
+  "algorithm_version": "1.6.0",
+  "component": "TetGen",
+  "copied_at_utc": "2026-08-18T03:39:57.187219+00:00",
+  "files": {
+    "predicates.cxx": {
+      "bytes": 210725,
+      "sha256": "d61f2a3017dda35875d74c8cd2479ce1f46cf9a4af8ff4399f5a93f1a89e3285"
+    },
+    "tetgen-license": {
+      "bytes": 35455,
+      "sha256": "bb48fb2a9b22a03d5f1ca6ede21857bcfa8aad28b81dfdd67e32440e23926893"
+    },
+    "tetgen.cxx": {
+      "bytes": 1330139,
+      "sha256": "aa6ca1d29f52b6a1572310a9383c0b6c4aa713fcbc6fc0b62e5ed0e96b43bf87"
+    },
+    "tetgen.h": {
+      "bytes": 154139,
+      "sha256": "051336542e4cb2eb3ef089143b458d576dc3ca3b8f3787e6e8e613b1ca1d937f"
+    }
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": "https://github.com/pyvista/tetgen.git",
+  "revision": "c039698cf4cce5c671b281c003dbc6cd8e58acc3",
+  "schema": "zynnova.tetgen-vendor.v1"
+}

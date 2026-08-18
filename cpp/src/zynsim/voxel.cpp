@@ -162,8 +162,13 @@ std::vector<std::int64_t> hex_connectivity_range(
     const auto n100 = base + yz_nodes;
     const auto n010 = base + (nz + 1);
     const auto n110 = n100 + (nz + 1);
+    // COMSOL first-order Hex8 tensor-product order:
+    // 000, 100, 010, 110, 001, 101, 011, 111.  Do not use the
+    // VTK/NASTRAN cyclic order (000,100,110,010,...): COMSOL interprets
+    // that permutation as an invalid element and can report adjacent cells
+    // on the same side of their shared face.
     const std::array<std::uint64_t, 8> nodes{
-        base, n100, n110, n010, base + 1, n100 + 1, n110 + 1, n010 + 1};
+        base, n100, n010, n110, base + 1, n100 + 1, n010 + 1, n110 + 1};
     for (std::size_t local = 0; local < 8; ++local) {
       output[static_cast<std::size_t>(row) * 8 + local] =
           static_cast<std::int64_t>(nodes[local]);

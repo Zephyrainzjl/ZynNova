@@ -1,0 +1,16 @@
+{
+  "component": "TetGen",
+  "algorithm_version": "1.6.0",
+  "source_repository": "https://github.com/pyvista/tetgen.git",
+  "source_revision": "c039698cf4cce5c671b281c003dbc6cd8e58acc3",
+  "source_subdirectory": "src",
+  "required_files": [
+    "tetgen.cxx",
+    "tetgen.h",
+    "predicates.cxx",
+    "tetgen-license"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "binding_license": "MIT",
+  "build_macro": "TETLIBRARY"
+}

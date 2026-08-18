@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence, TextIO
 
@@ -40,6 +40,23 @@ class GeneralCOMSOLExportReport:
     selections: Mapping[str, tuple[int, tuple[int, ...]]]
     out_of_core: bool
     native_backend: bool
+
+
+@dataclass(frozen=True, slots=True)
+class HexTopologyAudit:
+    """Orientation/topology evidence for first-order COMSOL Hex8 cells."""
+
+    cells_checked: int
+    faces_checked: int
+    shared_faces: int
+    boundary_faces: int
+    nonpositive_jacobians: int
+    nonplanar_faces: int
+    same_side_shared_faces: int
+    overconnected_faces: int
+    valid: bool
+    expected_shared_faces: int | None = None
+    missing_shared_faces: int = 0
 
 
 def plan_large_voxel_mesh(
@@ -165,6 +182,7 @@ def write_large_voxel_comsol_mphtxt(
     float_precision: int = 17,
     chunk_size: int = 262_144,
     prefer_native: bool = True,
+    validate_topology: bool = True,
 ) -> GeneralCOMSOLExportReport:
     """Write a huge voxel mesh without materializing nodes/connectivity.
 
@@ -179,6 +197,19 @@ def write_large_voxel_comsol_mphtxt(
     spacing = _triple(voxel_size_m)
     origin = _origin3(origin_m)
     kind = _kind(element_type)
+    if kind == "hex8" and validate_topology:
+        topology = audit_comsol_hex8_topology(
+            labels.shape, spacing=spacing, origin=origin, representative=True
+        )
+        if not topology.valid:
+            raise ValueError(
+                "COMSOL Hex8 topology audit failed before export: "
+                f"nonpositive_jacobians={topology.nonpositive_jacobians}, "
+                f"nonplanar_faces={topology.nonplanar_faces}, "
+                f"same_side_shared_faces={topology.same_side_shared_faces}, "
+                f"overconnected_faces={topology.overconnected_faces}, "
+                f"missing_shared_faces={topology.missing_shared_faces}"
+            )
     if prefer_native and _native is not None and hasattr(_native, "write_voxel_mphtxt"):
         report = _native.write_voxel_mphtxt(
             labels,
@@ -296,12 +327,21 @@ def _hex_rows(shape: tuple[int, int, int], start: int, stop: int) -> np.ndarray:
     n100 = base + stride_yz
     n010 = base + (nz + 1)
     n110 = n100 + (nz + 1)
-    return np.column_stack((n000, n100, n110, n010, n000 + 1, n100 + 1, n110 + 1, n010 + 1))
+    # COMSOL tensor-product order (Fig. 3-2 of the Programming Reference):
+    # 000, 100, 010, 110, 001, 101, 011, 111.  VTK's cyclic ordering
+    # swaps local vertices 3/4 and 7/8 and makes adjacent cells appear on the
+    # same side of a shared element face.
+    return np.column_stack((n000, n100, n010, n110, n000 + 1, n100 + 1, n010 + 1, n110 + 1))
 
 
 def _stream_volume_elements(handle: TextIO, shape: tuple[int, int, int], kind: str, chunk: int) -> None:
     total = int(np.prod(shape))
-    pattern = np.asarray([[0,1,2,6],[0,2,3,6],[0,3,7,6],[0,7,4,6],[0,4,5,6],[0,5,1,6]], dtype=np.int64)
+    # Six conforming tetrahedra around the 000--111 body diagonal, expressed
+    # in COMSOL tensor Hex8 local numbering.
+    pattern = np.asarray(
+        [[0,1,3,7],[0,3,2,7],[0,2,6,7],[0,6,4,7],[0,4,5,7],[0,5,1,7]],
+        dtype=np.int64,
+    )
     for start in range(0, total, chunk):
         hexes = _hex_rows(shape, start, min(total, start + chunk))
         rows = hexes if kind == "hex8" else hexes[:, pattern].reshape(-1, 4)
@@ -388,6 +428,14 @@ def _stream_boundary_quads(
     chunk_size: int = 262_144,
     triangulate: bool = False,
 ) -> None:
+    """Stream COMSOL tensor Quad4 faces with physically consistent normals.
+
+    COMSOL Quad4 local order is ``00, 10, 01, 11``.  It is not the cyclic
+    VTK order ``00, 10, 11, 01``.  The parameter directions below are chosen
+    so ``u x v`` points outwards on the exterior and from the lower-coordinate
+    voxel towards the higher-coordinate voxel on internal interfaces.
+    """
+
     nx, ny, nz = map(int, labels.shape)
 
     def node(i: np.ndarray | int, j: np.ndarray | int, k: np.ndarray | int) -> np.ndarray:
@@ -396,8 +444,9 @@ def _stream_boundary_quads(
     def emit(rows: np.ndarray, entity: int | np.ndarray) -> None:
         output_rows = np.asarray(rows, dtype=np.int64)
         if triangulate:
+            # Tensor quad diagonal 00--11.
             output_rows = np.concatenate(
-                (output_rows[:, [0, 1, 2]], output_rows[:, [0, 2, 3]]),
+                (output_rows[:, [0, 1, 3]], output_rows[:, [0, 3, 2]]),
                 axis=0,
             )
         if values:
@@ -417,27 +466,58 @@ def _stream_boundary_quads(
             yield first, min(total, first + max(1, int(chunk_size)))
 
     if exterior:
+        # xmin: u=+z, v=+y -> -x.  xmax: u=+y, v=+z -> +x.
         for i, name in ((0, "xmin"), (nx, "xmax")):
             for first, stop in ranges(ny * nz):
                 flat = np.arange(first, stop, dtype=np.int64)
                 y, z = flat // nz, flat % nz
-                rows = np.column_stack((node(i,y,z), node(i,y+1,z), node(i,y+1,z+1), node(i,y,z+1)))
+                if name == "xmin":
+                    rows = np.column_stack((
+                        node(i,y,z), node(i,y,z+1),
+                        node(i,y+1,z), node(i,y+1,z+1),
+                    ))
+                else:
+                    rows = np.column_stack((
+                        node(i,y,z), node(i,y+1,z),
+                        node(i,y,z+1), node(i,y+1,z+1),
+                    ))
                 emit(rows, boundary_entities[name])
+
+        # ymin: u=+x, v=+z -> -y.  ymax: u=+z, v=+x -> +y.
         for j, name in ((0, "ymin"), (ny, "ymax")):
             for first, stop in ranges(nx * nz):
                 flat = np.arange(first, stop, dtype=np.int64)
                 x, z = flat // nz, flat % nz
-                rows = np.column_stack((node(x,j,z), node(x+1,j,z), node(x+1,j,z+1), node(x,j,z+1)))
+                if name == "ymin":
+                    rows = np.column_stack((
+                        node(x,j,z), node(x+1,j,z),
+                        node(x,j,z+1), node(x+1,j,z+1),
+                    ))
+                else:
+                    rows = np.column_stack((
+                        node(x,j,z), node(x,j,z+1),
+                        node(x+1,j,z), node(x+1,j,z+1),
+                    ))
                 emit(rows, boundary_entities[name])
+
+        # zmin: u=+y, v=+x -> -z.  zmax: u=+x, v=+y -> +z.
         for k, name in ((0, "zmin"), (nz, "zmax")):
             for first, stop in ranges(nx * ny):
                 flat = np.arange(first, stop, dtype=np.int64)
                 x, y = flat // ny, flat % ny
-                rows = np.column_stack((node(x,y,k), node(x+1,y,k), node(x+1,y+1,k), node(x,y+1,k)))
+                if name == "zmin":
+                    rows = np.column_stack((
+                        node(x,y,k), node(x,y+1,k),
+                        node(x+1,y,k), node(x+1,y+1,k),
+                    ))
+                else:
+                    rows = np.column_stack((
+                        node(x,y,k), node(x+1,y,k),
+                        node(x,y+1,k), node(x+1,y+1,k),
+                    ))
                 emit(rows, boundary_entities[name])
 
     if interfaces:
-        # The slab size is selected from the requested maximum face chunk.
         x_chunk = max(1, int(chunk_size) // max(1, ny * nz))
         for axis in range(3):
             for x_offset, left, right in _iter_interface_chunks(labels, axis, x_chunk=x_chunk):
@@ -453,16 +533,201 @@ def _stream_boundary_quads(
                 )
                 indices[:, 0] += x_offset
                 if axis == 0:
+                    # +x, u=+y, v=+z.
                     i, j, k = indices[:,0] + 1, indices[:,1], indices[:,2]
-                    rows = np.column_stack((node(i,j,k), node(i,j+1,k), node(i,j+1,k+1), node(i,j,k+1)))
+                    rows = np.column_stack((
+                        node(i,j,k), node(i,j+1,k),
+                        node(i,j,k+1), node(i,j+1,k+1),
+                    ))
                 elif axis == 1:
+                    # +y, u=+z, v=+x.
                     i, j, k = indices[:,0], indices[:,1] + 1, indices[:,2]
-                    rows = np.column_stack((node(i,j,k), node(i+1,j,k), node(i+1,j,k+1), node(i,j,k+1)))
+                    rows = np.column_stack((
+                        node(i,j,k), node(i,j,k+1),
+                        node(i+1,j,k), node(i+1,j,k+1),
+                    ))
                 else:
+                    # +z, u=+x, v=+y.
                     i, j, k = indices[:,0], indices[:,1], indices[:,2] + 1
-                    rows = np.column_stack((node(i,j,k), node(i+1,j,k), node(i+1,j+1,k), node(i,j+1,k)))
+                    rows = np.column_stack((
+                        node(i,j,k), node(i+1,j,k),
+                        node(i,j+1,k), node(i+1,j+1,k),
+                    ))
                 emit(rows, entities)
 
+
+
+def audit_comsol_hex8_connectivity(
+    nodes: np.ndarray,
+    cells: np.ndarray,
+    *,
+    representative: bool = False,
+    tolerance: float | None = None,
+) -> HexTopologyAudit:
+    """Check COMSOL Hex8 Jacobians and ownership of every shared tensor face.
+
+    The shared-face test mirrors the COMSOL import diagnostic: the two cell
+    centres must lie on opposite sides of the shared face plane.  Planarity,
+    face multiplicity, and the center Jacobian are checked independently so a
+    bad local numbering cannot hide behind an unordered face-key match.
+    """
+
+    points = np.ascontiguousarray(nodes, dtype=np.float64)
+    hexes = np.ascontiguousarray(cells, dtype=np.int64)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("nodes must have shape (N, 3)")
+    if hexes.ndim != 2 or hexes.shape[1] != 8:
+        raise ValueError("cells must have shape (M, 8)")
+    if hexes.size and (hexes.min() < 0 or hexes.max() >= len(points)):
+        raise ValueError("cells contain an out-of-range node index")
+    if representative and len(hexes) > 4096:
+        ids = np.unique(np.linspace(0, len(hexes) - 1, 4096, dtype=np.int64))
+        hexes = hexes[ids]
+
+    local_faces = np.asarray(
+        [
+            [0, 2, 4, 6],  # x-min tensor face
+            [1, 3, 5, 7],  # x-max
+            [0, 1, 4, 5],  # y-min
+            [2, 3, 6, 7],  # y-max
+            [0, 1, 2, 3],  # z-min
+            [4, 5, 6, 7],  # z-max
+        ],
+        dtype=np.int64,
+    )
+    # Derivatives of trilinear Hex8 shape functions at the element center for
+    # tensor local coordinates (xi, eta, zeta) in {-1,+1}^3.
+    signs = np.asarray(
+        [
+            [-1,-1,-1], [1,-1,-1], [-1,1,-1], [1,1,-1],
+            [-1,-1,1], [1,-1,1], [-1,1,1], [1,1,1],
+        ],
+        dtype=np.float64,
+    )
+    scale = np.ptp(points, axis=0) if len(points) else np.ones(3)
+    characteristic = float(max(np.max(scale), 1.0))
+    eps = (
+        max(np.finfo(float).eps * 2048.0 * characteristic, np.finfo(float).tiny)
+        if tolerance is None
+        else float(tolerance)
+    )
+    if eps < 0.0:
+        raise ValueError("tolerance cannot be negative")
+
+    nonpositive = 0
+    nonplanar = 0
+    face_owners: dict[
+        tuple[int, int, int, int],
+        list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    ] = {}
+    for cell in hexes:
+        xyz = points[cell]
+        jacobian = (signs.T @ xyz) / 8.0
+        determinant = float(np.linalg.det(jacobian))
+        if not determinant > eps**3:
+            nonpositive += 1
+        centre = xyz.mean(axis=0)
+        for local in local_faces:
+            face_ids = cell[local]
+            face = points[face_ids]
+            # Tensor Quad4: 00,10,01,11.  The first three define the plane.
+            normal = np.cross(face[1] - face[0], face[2] - face[0])
+            norm = float(np.linalg.norm(normal))
+            if norm <= eps**2:
+                nonplanar += 1
+                unit = np.zeros(3)
+            else:
+                unit = normal / norm
+                if abs(float(np.dot(face[3] - face[0], unit))) > eps:
+                    nonplanar += 1
+            key = tuple(sorted(map(int, face_ids)))
+            face_owners.setdefault(key, []).append((centre, face.mean(axis=0), unit))
+
+    shared = boundary = same_side = overconnected = 0
+    for owners in face_owners.values():
+        if len(owners) == 1:
+            boundary += 1
+        elif len(owners) == 2:
+            shared += 1
+            (left_centre, face_centre, face_normal), (right_centre, _same_face, _normal) = owners
+            normal_length = float(np.linalg.norm(face_normal))
+            if normal_length <= 0.0:
+                same_side += 1
+            else:
+                signed_left = float(np.dot(left_centre - face_centre, face_normal))
+                signed_right = float(np.dot(right_centre - face_centre, face_normal))
+                # Distances are measured along a unit face normal.  Comparing
+                # against eps**2 is then scale-consistent even for 100 nm voxels.
+                if signed_left * signed_right >= -eps**2:
+                    same_side += 1
+        else:
+            overconnected += 1
+
+    valid = nonpositive == nonplanar == same_side == overconnected == 0
+    return HexTopologyAudit(
+        cells_checked=int(len(hexes)),
+        faces_checked=int(sum(len(value) for value in face_owners.values())),
+        shared_faces=shared,
+        boundary_faces=boundary,
+        nonpositive_jacobians=nonpositive,
+        nonplanar_faces=nonplanar,
+        same_side_shared_faces=same_side,
+        overconnected_faces=overconnected,
+        valid=valid,
+        expected_shared_faces=None,
+        missing_shared_faces=0,
+    )
+
+
+def audit_comsol_hex8_topology(
+    shape: Sequence[int],
+    *,
+    spacing: float | Sequence[float] = 1.0,
+    origin: Sequence[float] = (0.0, 0.0, 0.0),
+    representative: bool = False,
+) -> HexTopologyAudit:
+    """Construct/audit the same structured topology used by the MPHTXT writer."""
+
+    resolved_shape = tuple(map(int, shape))
+    if len(resolved_shape) != 3 or min(resolved_shape) < 1:
+        raise ValueError("shape must contain three positive integers")
+    resolved_spacing = _triple(spacing)
+    resolved_origin = _origin3(origin)
+    if representative:
+        # A 2x2x2 template exercises all three shared-face directions while
+        # remaining independent of production volume size.
+        test_shape = tuple(min(size, 2) for size in resolved_shape)
+    else:
+        test_shape = resolved_shape
+    nodes = _structured_nodes_array(test_shape, resolved_spacing, resolved_origin)
+    cells = _hex_rows(test_shape, 0, int(np.prod(test_shape)))
+    audit = audit_comsol_hex8_connectivity(nodes, cells)
+    tx, ty, tz = test_shape
+    expected_shared = (tx - 1) * ty * tz + tx * (ty - 1) * tz + tx * ty * (tz - 1)
+    missing = max(0, int(expected_shared - audit.shared_faces))
+    return replace(
+        audit,
+        expected_shared_faces=int(expected_shared),
+        missing_shared_faces=missing,
+        valid=bool(audit.valid and missing == 0),
+    )
+
+
+def _structured_nodes_array(
+    shape: tuple[int, int, int],
+    spacing: tuple[float, float, float],
+    origin: tuple[float, float, float],
+) -> np.ndarray:
+    nx, ny, nz = shape
+    i, j, k = np.meshgrid(
+        np.arange(nx + 1), np.arange(ny + 1), np.arange(nz + 1),
+        indexing="ij",
+    )
+    return np.column_stack((
+        origin[0] + spacing[0] * i.ravel(order="C"),
+        origin[1] + spacing[1] * j.ravel(order="C"),
+        origin[2] + spacing[2] * k.ravel(order="C"),
+    ))
 
 
 def _phase_counts_chunked(labels: np.ndarray, *, chunk_size_x: int = 32) -> dict[int, int]:
@@ -637,7 +902,10 @@ def _safe_name(value: object) -> str:
 
 __all__ = [
     "GeneralCOMSOLExportReport",
+    "HexTopologyAudit",
     "LargeVoxelMeshPlan",
+    "audit_comsol_hex8_connectivity",
+    "audit_comsol_hex8_topology",
     "plan_large_voxel_mesh",
     "write_general_comsol_mphtxt",
     "write_large_voxel_comsol_mphtxt",

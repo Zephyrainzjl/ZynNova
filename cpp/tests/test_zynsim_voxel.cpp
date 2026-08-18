@@ -25,6 +25,9 @@ int main() {
 
   const auto hexes = hex_connectivity_range(2, 2, 2, 0, 8);
   assert(hexes.size() == 64);
-  assert(hexes.front() == 0);
+  const std::vector<std::int64_t> first_cell{0, 9, 3, 12, 1, 10, 4, 13};
+  assert(std::vector<std::int64_t>(hexes.begin(), hexes.begin() + 8) == first_cell);
+  const std::vector<std::int64_t> x_neighbor{9, 18, 12, 21, 10, 19, 13, 22};
+  assert(std::vector<std::int64_t>(hexes.begin() + 32, hexes.begin() + 40) == x_neighbor);
   return 0;
 }
