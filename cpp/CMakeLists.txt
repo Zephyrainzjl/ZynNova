@@ -329,10 +329,45 @@ if(ZYNNOVA_BUILD_TETGEN)
     )
   endif()
 
+  # MinGW-built .pyd files can compile/link successfully yet fail to import in
+  # a Jupyter/Python process that does not inherit the compiler's PATH.  Link
+  # the GCC/C++ runtimes statically when possible and also co-install any
+  # compiler runtime DLLs that the toolchain reports, next to the extension.
+  set(_zynnova_tetgen_mingw_runtime_files)
+  if(MINGW)
+    target_link_options(
+      _zynmorph_tetgen_native PRIVATE -static-libgcc -static-libstdc++
+    )
+    foreach(_runtime_name IN ITEMS
+        libwinpthread-1.dll
+        libgcc_s_seh-1.dll
+        libgcc_s_sjlj-1.dll
+        libgcc_s_dw2-1.dll
+        libstdc++-6.dll
+    )
+      execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=${_runtime_name}"
+        OUTPUT_VARIABLE _runtime_path
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+      )
+      if(IS_ABSOLUTE "${_runtime_path}" AND EXISTS "${_runtime_path}")
+        list(APPEND _zynnova_tetgen_mingw_runtime_files "${_runtime_path}")
+      endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _zynnova_tetgen_mingw_runtime_files)
+  endif()
+
   install(TARGETS _zynmorph_tetgen_native
     LIBRARY DESTINATION zynnova/_native
     RUNTIME DESTINATION zynnova/_native
   )
+  if(_zynnova_tetgen_mingw_runtime_files)
+    install(
+      FILES ${_zynnova_tetgen_mingw_runtime_files}
+      DESTINATION zynnova/_native
+    )
+  endif()
   # Package the exact TetGen source used to build the extension.  Only files
   # required for license/source traceability are mandatory.  Optional project
   # documentation and the vendor manifest are installed only when present;

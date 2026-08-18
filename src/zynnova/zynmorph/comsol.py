@@ -30,9 +30,15 @@ from ..zynsim.io import (
     COMSOLMPHTXTInfo,
     COMSOLMeshExportReport,
     GeneralCOMSOLExportReport,
+    HexTopologyAudit,
+    HexTopologyValidationReport,
     LargeVoxelMeshPlan,
+    audit_comsol_hex8_connectivity,
+    audit_comsol_hex8_topology,
     inspect_mphtxt,
     plan_large_voxel_mesh,
+    validate_comsol_hex_connectivity,
+    validate_structured_hex_topology,
     write_comsol_mphtxt,
     write_large_voxel_comsol_mphtxt,
 )
@@ -110,6 +116,42 @@ def default_coordinate_boundary_unions() -> dict[str, tuple[str, ...]]:
     }
 
 
+def _available_boundary_set_names(mesh: Mesh) -> set[str]:
+    """Return non-empty named boundary sets available before MPHTXT partitioning.
+
+    Coordinate helpers intentionally create empty ``xmin/xmax/...`` arrays for
+    free-form geometries that do not contain an exterior triangle lying exactly
+    on a coordinate-extreme plane.  Those empty sets are discarded by the
+    low-level COMSOL writer, so default unions must not reference them.
+    """
+
+    return {
+        str(name)
+        for name, faces in mesh.boundary_faces.items()
+        if np.asarray(faces).size
+    }
+
+
+def _compatible_default_boundary_unions(
+    mesh: Mesh,
+) -> dict[str, tuple[str, ...]]:
+    """Return only default coordinate unions whose source sets exist.
+
+    This keeps the convenient terminal/periodic unions for rectangular meshes,
+    while arbitrary curved/free-form domains no longer fail because, e.g.,
+    ``xmin`` and ``xmax`` are empty and therefore absent from the final COMSOL
+    boundary partition.  User-supplied boundary unions remain strict and still
+    raise when they reference unknown names.
+    """
+
+    available = _available_boundary_set_names(mesh)
+    return {
+        label: names
+        for label, names in default_coordinate_boundary_unions().items()
+        if set(names).issubset(available)
+    }
+
+
 def to_comsol_tet_mesh(
     mesh: VolumeMesh,
     *,
@@ -154,12 +196,18 @@ def export_comsol_mphtxt(
     include_boundaries: bool = True,
     include_internal_interfaces: bool = True,
     include_exterior: bool = True,
+    include_boundary_triangles: bool | None = None,
+    include_interface_triangles: bool | None = None,
+    include_material_interfaces: bool | None = None,
+    include_exterior_triangles: bool | None = None,
+    include_exterior_boundaries: bool | None = None,
     create_domain_selections: bool = True,
     create_boundary_selections: bool = True,
     create_interface_selections: bool = True,
     create_exterior_selection: bool = True,
     float_precision: int = 17,
     line_ending: str = "\n",
+    include_domain_entity_indices: bool = True,
     verify: bool = True,
 ) -> COMSOLMeshExportReport:
     """Export a partitioned Tet4 mesh through the original ZynSim writer.
@@ -169,6 +217,19 @@ def export_comsol_mphtxt(
     native ``Selection`` objects rather than sidecar-only metadata.
     """
 
+    # Backward-compatible aliases used by earlier ZynMorph notebooks.
+    # The canonical names match the underlying ZynSim COMSOL writer.
+    if include_boundary_triangles is not None:
+        include_boundaries = bool(include_boundary_triangles)
+    if include_interface_triangles is not None:
+        include_internal_interfaces = bool(include_interface_triangles)
+    if include_material_interfaces is not None:
+        include_internal_interfaces = bool(include_material_interfaces)
+    if include_exterior_triangles is not None:
+        include_exterior = bool(include_exterior_triangles)
+    if include_exterior_boundaries is not None:
+        include_exterior = bool(include_exterior_boundaries)
+
     active_regions = tuple(sorted(map(int, np.unique(mesh.cell_regions))))
     supplied_names = mesh.region_names if domain_names is None else domain_names
     active_names = {
@@ -177,10 +238,15 @@ def export_comsol_mphtxt(
     }
 
     merged_domain_selections: dict[str, tuple[int, ...]] = {}
-    if include_default_battery_selections:
+    if not include_domain_entity_indices and domain_selections:
+        raise ValueError(
+            "domain_selections require include_domain_entity_indices=True"
+        )
+    if include_domain_entity_indices and include_default_battery_selections:
         merged_domain_selections.update(default_battery_domain_selections(active_regions))
-    for label, values in (domain_selections or {}).items():
-        merged_domain_selections[str(label)] = tuple(map(int, values))
+    if include_domain_entity_indices:
+        for label, values in (domain_selections or {}).items():
+            merged_domain_selections[str(label)] = tuple(map(int, values))
 
     converted = to_comsol_tet_mesh(
         mesh,
@@ -195,7 +261,9 @@ def export_comsol_mphtxt(
         and include_boundaries
         and create_boundary_selections
     ):
-        merged_boundary_selections.update(default_coordinate_boundary_unions())
+        merged_boundary_selections.update(
+            _compatible_default_boundary_unions(converted)
+        )
     for label, names in (boundary_selections or {}).items():
         merged_boundary_selections[str(label)] = tuple(map(str, names))
 
@@ -209,12 +277,13 @@ def export_comsol_mphtxt(
         boundary_selections=merged_boundary_selections or None,
         include_internal_interfaces=include_internal_interfaces,
         include_exterior=include_exterior,
-        create_domain_selections=create_domain_selections,
+        create_domain_selections=(create_domain_selections and include_domain_entity_indices),
         create_boundary_selections=create_boundary_selections,
         create_interface_selections=create_interface_selections,
         create_exterior_selection=create_exterior_selection,
         float_precision=float_precision,
         line_ending=line_ending,
+        include_domain_entity_indices=include_domain_entity_indices,
     )
     if verify:
         _verify_tet4_export(report)
@@ -250,6 +319,10 @@ def export_voxel_comsol_mphtxt(
     float_precision: int = 17,
     chunk_size: int = 262_144,
     prefer_native: bool = True,
+    include_domain_entity_indices: bool = True,
+    include_volume_elements: bool = True,
+    validate_topology: bool = True,
+    topology_validation_limit: int = 100_000,
     verify: bool = True,
 ) -> GeneralCOMSOLExportReport:
     """Stream a label volume to MPHTXT using the original out-of-core writer.
@@ -281,9 +354,18 @@ def export_voxel_comsol_mphtxt(
         float_precision=float_precision,
         chunk_size=chunk_size,
         prefer_native=prefer_native,
+        include_domain_entity_indices=include_domain_entity_indices,
+        include_volume_elements=include_volume_elements,
+        validate_topology=validate_topology,
+        topology_validation_limit=topology_validation_limit,
     )
     if verify:
-        _verify_voxel_export(report, volume=volume, element_type=element_type)
+        _verify_voxel_export(
+            report,
+            volume=volume,
+            element_type=element_type,
+            include_volume_elements=include_volume_elements,
+        )
     return report
 
 
@@ -313,6 +395,7 @@ def _verify_voxel_export(
     *,
     volume: MicrostructureVolume,
     element_type: str,
+    include_volume_elements: bool,
 ) -> COMSOLMPHTXTInfo:
     info = inspect_mphtxt(report.path)
     if info.format_version != (0, 1) or info.mesh_class_version != 4:
@@ -327,8 +410,13 @@ def _verify_voxel_export(
     is_tet = normalized in {"tet", "tet4", "tetrahedron"}
     element_name = "tet" if is_tet else "hex"
     multiplier = 6 if is_tet else 1
-    if info.element_counts.get(element_name) != volume.labels.size * multiplier:
+    expected_volume_count = volume.labels.size * multiplier if include_volume_elements else 0
+    if info.element_counts.get(element_name, 0) != expected_volume_count:
         raise RuntimeError("MPHTXT verification failed: voxel element count mismatch")
+    if report.volume_elements_written is not bool(include_volume_elements):
+        raise RuntimeError("MPHTXT verification failed: report volume-element mode mismatch")
+    if not include_volume_elements and any(item.dimension == 3 for item in info.selections):
+        raise RuntimeError("MPHTXT verification failed: surface-only file contains 3-D selections")
     return info
 
 
@@ -336,7 +424,11 @@ __all__ = [
     "COMSOLMPHTXTInfo",
     "COMSOLMeshExportReport",
     "GeneralCOMSOLExportReport",
+    "HexTopologyAudit",
+    "HexTopologyValidationReport",
     "LargeVoxelMeshPlan",
+    "audit_comsol_hex8_connectivity",
+    "audit_comsol_hex8_topology",
     "default_battery_domain_selections",
     "default_coordinate_boundary_unions",
     "export_comsol_mphtxt",
@@ -344,4 +436,6 @@ __all__ = [
     "inspect_comsol_mphtxt",
     "plan_voxel_comsol_mphtxt",
     "to_comsol_tet_mesh",
+    "validate_comsol_hex_connectivity",
+    "validate_structured_hex_topology",
 ]

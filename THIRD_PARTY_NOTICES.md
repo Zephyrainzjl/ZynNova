@@ -13,3 +13,19 @@ A wheel compiled with `_zynmorph_tetgen_native` links to and redistributes
 TetGen.  The resulting covered distribution must comply with TetGen's AGPL
 terms.  Build with `-DZYNNOVA_BUILD_TETGEN=OFF` when that licensing boundary is
 not acceptable.  This notice is informational and not legal advice.
+
+## MCRpy source-audited integration
+
+- Upstream: `NEFM-TUDresden/MCRpy`.
+- License: Apache License 2.0.
+- ZynNova uses a source-audited native NumPy/PyTorch/SciPy implementation of the
+  public descriptor/loss/optimizer/workflow surface. No MCRpy package is
+  installed at runtime and no upstream pickle weight file is redistributed.
+
+## MCS-CICE ElectrodeGenerationAlgorithm source audit
+
+- Upstream: `mcs-cice/ElectrodeGenerationAlgorithm`.
+- At the 2026-08-18 audit, no LICENSE file was visible in the repository root.
+- ZynNova therefore does not vendor or copy those Python files. The electrode
+  generator is a clean-room implementation of the behavior and public/source
+  interfaces observed in the repository.

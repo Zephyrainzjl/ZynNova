@@ -9,7 +9,12 @@ voice conversion behind one extensible Python namespace.
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+from pkgutil import extend_path
 from typing import Mapping
+
+# Support split editable installs: Python sources can live in the checkout while
+# CMake-installed native extensions live in the editable wheel/install tree.
+__path__ = extend_path(__path__, __name__)
 
 try:
     __version__ = version("zynnova")

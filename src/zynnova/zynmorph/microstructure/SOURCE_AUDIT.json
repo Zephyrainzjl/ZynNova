@@ -1,0 +1,79 @@
+{
+  "schema": "zynnova.zynmorph.microstructure-source-audit.v1",
+  "audited_on": "2026-08-18",
+  "sources": [
+    {
+      "name": "MCS-CICE ElectrodeGenerationAlgorithm",
+      "repository": "https://github.com/mcs-cice/ElectrodeGenerationAlgorithm",
+      "license_status": "No LICENSE file was visible in the audited repository root; upstream source is not vendored or copied into ZynNova.",
+      "integration_mode": "clean-room behavioral/API parity",
+      "audited_files": [
+        "README.md",
+        "electrode_generator_auto.py",
+        "electrode_generation.py",
+        "structure.py",
+        "_imgen.py",
+        "_pseudo_packings.py",
+        "_ellipsoid_insertions.py"
+      ],
+      "covered_capabilities": [
+        "sphere, ellipsoid, and mixed particle geometry",
+        "RSA, gravity, pseudo-gravity, and pseudo-electrostatic packing",
+        "contained, extended, and periodic boundary modes",
+        "lognormal/explicit particle-size distributions and validation",
+        "configurable ellipsoid orientation distributions",
+        "particle overlap control and individual particle labels",
+        "bridge, mistry, random, blob, mixed, and none CBD construction",
+        "CBD nanoporosity correction",
+        "padding/cropping and empty-tail cutting helpers",
+        "x-axis channel carving",
+        "variable physical voxel size",
+        "mass-fraction/density to volume-target conversion",
+        "porosity, mass-loading, and areal-capacity statistics",
+        "HDF5 and VTK export plus safe NPY/NPZ replacements for pickle"
+      ]
+    },
+    {
+      "name": "MCRpy",
+      "repository": "https://github.com/NEFM-TUDresden/MCRpy",
+      "license_status": "Apache-2.0",
+      "integration_mode": "source-audited ZynNova-native reimplementation/adaptation",
+      "audited_paths": [
+        "mcrpy/descriptors",
+        "mcrpy/losses",
+        "mcrpy/optimizers",
+        "mcrpy/src",
+        "mcrpy/characterize.py",
+        "mcrpy/reconstruct.py",
+        "mcrpy/match.py",
+        "mcrpy/merge.py",
+        "mcrpy/interpolate.py",
+        "mcrpy/smooth.py",
+        "mcrpy/view.py",
+        "mcrpy/src/translation.py"
+      ],
+      "covered_capabilities": [
+        "descriptor/loss/optimizer plugin registries",
+        "VolumeFractions, Variation, FFTCorrelations, TwoPointCorrelations, Correlations, FFTCrossCorrelations, CrossCorrelations, LineCorrelations, LinealPath, LinealPathApproximation, LineLinealPathApproximation, GramMatrices, MultiPhaseGramMatrices, OrientationDescriptor",
+        "MSE, SSE, RMS, L1, L2 losses",
+        "Adam, Adamax, Nadam, RMSprop, SGD, Adagrad, Adadelta, LBFGSB, TNC, SimulatedAnnealing/Yeong-Torquato, YTPost optimizers",
+        "binary single-phase and exact multi-phase characterization",
+        "2D and 3D directional slice average/sample/sample_surface modes",
+        "isotropic directional averaging",
+        "directional merge semantics for one/two/three 2D characterizations",
+        "multigrid descriptor pyramids",
+        "coarse-to-fine multigrid reconstruction",
+        "gradient, SciPy, simulated-annealing, and postprocess reconstruction paths",
+        "characterize, reconstruct, match, merge, interpolate, smooth, view",
+        "safe characterization and microstructure I/O",
+        "periodic 2D/3D microstructure translation without changing phase fractions"
+      ],
+      "deliberate_upgrades": [
+        "PyTorch/NumPy/SciPy replaces legacy TensorFlow dependency",
+        "softmax phase probabilities enforce the multi-phase sum-to-one constraint exactly instead of a penalty",
+        "native differentiable multi-resolution Gram features support 2D/3D without requiring a bundled VGG pickle",
+        "NPZ/HDF5 serialization replaces unsafe pickle for ZynNova-owned artifacts"
+      ]
+    }
+  ]
+}

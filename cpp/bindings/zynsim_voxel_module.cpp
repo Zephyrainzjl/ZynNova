@@ -108,6 +108,11 @@ PYBIND11_MODULE(_zynsim_voxel_native, module) {
       });
 
   module.def(
+      "hex_connectivity_convention",
+      []() { return std::string("comsol-v4-tensor-1"); },
+      "Return the local-node convention used by hex_connectivity_range.");
+
+  module.def(
       "hex_connectivity_range",
       [](const std::array<std::size_t, 3>& shape,
          const std::uint64_t start, const std::uint64_t stop) {

@@ -12,6 +12,14 @@ from typing import Iterable, Mapping, Sequence, TextIO
 import numpy as np
 
 from ..core.general_mesh import GeneralMesh
+from .comsol_topology import (
+    COMSOL_HEX8_TO_TET4,
+    HexTopologyValidationReport,
+    structured_comsol_hex_rows,
+    to_comsol_connectivity,
+    validate_comsol_hex_connectivity,
+    validate_structured_hex_topology,
+)
 
 try:  # direct C++ writer may be available in built wheels
     from zynnova._native import _zynsim_voxel_native as _native
@@ -40,6 +48,17 @@ class GeneralCOMSOLExportReport:
     selections: Mapping[str, tuple[int, tuple[int, ...]]]
     out_of_core: bool
     native_backend: bool
+    domain_entity_indices_written: bool = True
+    volume_elements_written: bool = True
+    topology_validation: HexTopologyValidationReport | None = None
+
+    @property
+    def diagnostic_mode(self) -> str:
+        if not self.volume_elements_written:
+            return "surface-only"
+        if not self.domain_entity_indices_written:
+            return "volume-without-domain-entities"
+        return "full-volume"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +122,8 @@ def write_general_comsol_mphtxt(
     *,
     mesh_tag: str = "mesh1",
     float_precision: int = 17,
+    include_domain_entity_indices: bool = True,
+    include_volume_elements: bool = True,
 ) -> GeneralCOMSOLExportReport:
     """Write a validated mixed first-order mesh to COMSOL MPHTXT.
 
@@ -113,8 +134,18 @@ def write_general_comsol_mphtxt(
     """
 
     target = _target(path)
+    blocks = tuple(
+        block for block in mesh.blocks if include_volume_elements or block.dimension != 3
+    )
+    if not blocks:
+        raise ValueError(
+            "surface-only COMSOL export requires at least one non-volume element block"
+        )
     entity_maps = _entity_maps(mesh)
     selections = _remap_selections(mesh.selections, entity_maps)
+    write_domain_entities = bool(include_domain_entity_indices and include_volume_elements)
+    if not write_domain_entities:
+        selections = {name: value for name, value in selections.items() if value[0] != 3}
     selection_records = [(label, dim, entities) for label, (dim, entities) in selections.items()]
     tags = [mesh_tag, *[f"{mesh_tag}_sel_{i:06d}" for i in range(1, len(selection_records) + 1)]]
     temporary = _temporary(target)
@@ -132,23 +163,29 @@ def write_general_comsol_mphtxt(
             _line(handle, "# Mesh vertex coordinates")
             _write_float_rows(handle, mesh.nodes, float_precision)
             _line(handle)
-            _line(handle, f"{len(mesh.blocks)} # number of element types")
-            for block_index, block in enumerate(mesh.blocks):
+            _line(handle, f"{len(blocks)} # number of element types")
+            for block_index, block in enumerate(blocks):
                 _line(handle, f"# Type #{block_index}")
                 _string(handle, block.comsol_type_name, "type name")
                 _line(handle, f"{block.connectivity.shape[1]} # number of vertices per element")
                 _line(handle, f"{block.n_elements} # number of elements")
                 _line(handle, "# Elements")
-                _write_int_rows(handle, block.connectivity)
-                _line(handle, f"{block.n_elements} # number of geometric entity indices")
-                _line(handle, "# Geometric entity indices")
-                mapping = entity_maps[block.dimension]
-                remapped = np.fromiter(
-                    (mapping[int(value)] for value in block.entity_ids),
-                    dtype=np.int32,
-                    count=block.n_elements,
+                _write_int_rows(
+                    handle,
+                    to_comsol_connectivity(block.element_type, block.connectivity),
                 )
-                _write_int_vector(handle, remapped)
+                write_entities = write_domain_entities or block.dimension != 3
+                entity_count = block.n_elements if write_entities else 0
+                _line(handle, f"{entity_count} # number of geometric entity indices")
+                _line(handle, "# Geometric entity indices")
+                if write_entities:
+                    mapping = entity_maps[block.dimension]
+                    remapped = np.fromiter(
+                        (mapping[int(value)] for value in block.entity_ids),
+                        dtype=np.int32,
+                        count=block.n_elements,
+                    )
+                    _write_int_vector(handle, remapped)
                 _line(handle)
             _write_selection_objects(handle, mesh_tag, tags, selection_records)
         os.replace(temporary, target)
@@ -156,15 +193,18 @@ def write_general_comsol_mphtxt(
         temporary.unlink(missing_ok=True)
         raise
     counts: Counter[str] = Counter()
-    for block in mesh.blocks:
+    for block in blocks:
         counts[block.element_type] += block.n_elements
     return GeneralCOMSOLExportReport(
-        target,
-        mesh.n_nodes,
-        dict(counts),
-        selections,
-        False,
-        False,
+        path=target,
+        vertex_count=mesh.n_nodes,
+        element_counts=dict(counts),
+        selections=selections,
+        out_of_core=False,
+        native_backend=False,
+        domain_entity_indices_written=write_domain_entities,
+        volume_elements_written=bool(include_volume_elements),
+        topology_validation=None,
     )
 
 
@@ -182,7 +222,10 @@ def write_large_voxel_comsol_mphtxt(
     float_precision: int = 17,
     chunk_size: int = 262_144,
     prefer_native: bool = True,
+    include_domain_entity_indices: bool = True,
+    include_volume_elements: bool = True,
     validate_topology: bool = True,
+    topology_validation_limit: int = 100_000,
 ) -> GeneralCOMSOLExportReport:
     """Write a huge voxel mesh without materializing nodes/connectivity.
 
@@ -197,20 +240,19 @@ def write_large_voxel_comsol_mphtxt(
     spacing = _triple(voxel_size_m)
     origin = _origin3(origin_m)
     kind = _kind(element_type)
-    if kind == "hex8" and validate_topology:
-        topology = audit_comsol_hex8_topology(
-            labels.shape, spacing=spacing, origin=origin, representative=True
+    if not include_volume_elements and not (
+        include_exterior_boundaries or include_material_interfaces
+    ):
+        raise ValueError(
+            "surface-only COMSOL export requires exterior boundaries and/or material interfaces"
         )
-        if not topology.valid:
-            raise ValueError(
-                "COMSOL Hex8 topology audit failed before export: "
-                f"nonpositive_jacobians={topology.nonpositive_jacobians}, "
-                f"nonplanar_faces={topology.nonplanar_faces}, "
-                f"same_side_shared_faces={topology.same_side_shared_faces}, "
-                f"overconnected_faces={topology.overconnected_faces}, "
-                f"missing_shared_faces={topology.missing_shared_faces}"
-            )
-    if prefer_native and _native is not None and hasattr(_native, "write_voxel_mphtxt"):
+    write_domain_entities = bool(include_domain_entity_indices and include_volume_elements)
+    if (
+        include_volume_elements
+        and prefer_native
+        and _native is not None
+        and hasattr(_native, "write_voxel_mphtxt")
+    ):
         report = _native.write_voxel_mphtxt(
             labels,
             str(target),
@@ -221,15 +263,35 @@ def write_large_voxel_comsol_mphtxt(
             bool(include_material_interfaces),
             str(mesh_tag),
             int(float_precision),
+            bool(write_domain_entities),
         )
         return GeneralCOMSOLExportReport(
-            target,
-            int(report["vertex_count"]),
-            dict(report["element_counts"]),
-            {},
-            True,
-            True,
+            path=target,
+            vertex_count=int(report["vertex_count"]),
+            element_counts=dict(report["element_counts"]),
+            selections={},
+            out_of_core=True,
+            native_backend=True,
+            domain_entity_indices_written=write_domain_entities,
+            volume_elements_written=True,
+            topology_validation=None,
         )
+
+    topology_report = None
+    if kind == "hex8" and include_volume_elements and validate_topology:
+        topology_report = validate_structured_hex_topology(
+            labels.shape,
+            spacing=spacing,
+            origin=origin,
+            maximum_shared_faces=topology_validation_limit,
+        )
+        if not topology_report.valid:
+            raise ValueError(
+                "COMSOL Hex8 topology validation failed: "
+                f"same_side_shared_faces={topology_report.same_side_shared_faces}, "
+                f"minimum_jacobian={topology_report.minimum_jacobian}, "
+                f"failure_coordinate={topology_report.failure_coordinate}"
+            )
 
     plan = plan_large_voxel_mesh(
         labels,
@@ -240,9 +302,11 @@ def write_large_voxel_comsol_mphtxt(
     region_map = {phase: index for index, phase in enumerate(plan.region_labels, start=1)}
     names = {phase: _safe_name((phase_names or {}).get(phase, f"phase_{phase}")) for phase in plan.region_labels}
     boundary_entities, interface_entities = _boundary_entity_maps(labels, include_exterior_boundaries, include_material_interfaces)
-    selections: dict[str, tuple[int, tuple[int, ...]]] = {
-        names[phase]: (3, (region_map[phase],)) for phase in plan.region_labels
-    }
+    selections: dict[str, tuple[int, tuple[int, ...]]] = (
+        {names[phase]: (3, (region_map[phase],)) for phase in plan.region_labels}
+        if write_domain_entities
+        else {}
+    )
     selections.update({name: (2, (entity,)) for name, entity in boundary_entities.items()})
     selections.update({f"interface_{names[a]}_{names[b]}": (2, (entity,)) for (a, b), entity in interface_entities.items()})
     selection_records = [(label, dim, entities) for label, (dim, entities) in selections.items()]
@@ -262,22 +326,28 @@ def write_large_voxel_comsol_mphtxt(
             _line(handle, "# Mesh vertex coordinates")
             _stream_nodes(handle, labels.shape, spacing, origin, float_precision, chunk_size)
             boundary_count = plan.exterior_face_count + plan.interface_face_count
-            type_count = 1 + int(boundary_count > 0)
+            type_count = int(include_volume_elements) + int(boundary_count > 0)
             _line(handle)
             _line(handle, f"{type_count} # number of element types")
-            _line(handle, "# Type #0")
-            comsol_kind, nodes_per = ("hex", 8) if kind == "hex8" else ("tet", 4)
-            _string(handle, comsol_kind, "type name")
-            _line(handle, f"{nodes_per} # number of vertices per element")
-            _line(handle, f"{plan.volume_element_count} # number of elements")
-            _line(handle, "# Elements")
-            _stream_volume_elements(handle, labels.shape, kind, chunk_size)
-            _line(handle, f"{plan.volume_element_count} # number of geometric entity indices")
-            _line(handle, "# Geometric entity indices")
-            _stream_volume_entities(handle, labels, region_map, kind, chunk_size)
+            type_index = 0
+            if include_volume_elements:
+                _line(handle, f"# Type #{type_index}")
+                comsol_kind, nodes_per = ("hex", 8) if kind == "hex8" else ("tet", 4)
+                _string(handle, comsol_kind, "type name")
+                _line(handle, f"{nodes_per} # number of vertices per element")
+                _line(handle, f"{plan.volume_element_count} # number of elements")
+                _line(handle, "# Elements")
+                _stream_volume_elements(handle, labels.shape, kind, chunk_size)
+                volume_entity_count = plan.volume_element_count if write_domain_entities else 0
+                _line(handle, f"{volume_entity_count} # number of geometric entity indices")
+                _line(handle, "# Geometric entity indices")
+                if write_domain_entities:
+                    _stream_volume_entities(handle, labels, region_map, kind, chunk_size)
+                type_index += 1
             if boundary_count:
-                _line(handle)
-                _line(handle, "# Type #1")
+                if include_volume_elements:
+                    _line(handle)
+                _line(handle, f"# Type #{type_index}")
                 boundary_type, boundary_nodes = ("quad", 4) if kind == "hex8" else ("tri", 3)
                 _string(handle, boundary_type, "type name")
                 _line(handle, f"{boundary_nodes} # number of vertices per element")
@@ -292,10 +362,22 @@ def write_large_voxel_comsol_mphtxt(
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
-    counts = {kind: plan.volume_element_count}
+    counts: dict[str, int] = {}
+    if include_volume_elements:
+        counts[kind] = plan.volume_element_count
     if boundary_count:
         counts["quad4" if kind == "hex8" else "tri3"] = boundary_count
-    return GeneralCOMSOLExportReport(target, plan.vertex_count, counts, selections, True, False)
+    return GeneralCOMSOLExportReport(
+        path=target,
+        vertex_count=plan.vertex_count,
+        element_counts=counts,
+        selections=selections,
+        out_of_core=True,
+        native_backend=False,
+        domain_entity_indices_written=write_domain_entities,
+        volume_elements_written=bool(include_volume_elements),
+        topology_validation=topology_report,
+    )
 
 
 def _stream_nodes(handle: TextIO, shape: tuple[int, int, int], spacing: tuple[float, float, float], origin: tuple[float, float, float], precision: int, chunk: int) -> None:
@@ -312,36 +394,25 @@ def _stream_nodes(handle: TextIO, shape: tuple[int, int, int], spacing: tuple[fl
 
 
 def _hex_rows(shape: tuple[int, int, int], start: int, stop: int) -> np.ndarray:
-    if _native is not None and hasattr(_native, "hex_connectivity_range"):
+    if (
+        _native is not None
+        and hasattr(_native, "hex_connectivity_range")
+        and hasattr(_native, "hex_connectivity_convention")
+        and _native.hex_connectivity_convention() == "comsol-v4-tensor-1"
+    ):
         return np.ascontiguousarray(
             _native.hex_connectivity_range(tuple(map(int, shape)), int(start), int(stop)),
             dtype=np.int64,
         )
-    nx, ny, nz = map(int, shape)
-    ids = np.arange(start, stop, dtype=np.int64)
-    i, rem = np.divmod(ids, ny * nz)
-    j, k = np.divmod(rem, nz)
-    stride_yz = (ny + 1) * (nz + 1)
-    base = i * stride_yz + j * (nz + 1) + k
-    n000 = base
-    n100 = base + stride_yz
-    n010 = base + (nz + 1)
-    n110 = n100 + (nz + 1)
-    # COMSOL tensor-product order (Fig. 3-2 of the Programming Reference):
-    # 000, 100, 010, 110, 001, 101, 011, 111.  VTK's cyclic ordering
-    # swaps local vertices 3/4 and 7/8 and makes adjacent cells appear on the
-    # same side of a shared element face.
-    return np.column_stack((n000, n100, n010, n110, n000 + 1, n100 + 1, n010 + 1, n110 + 1))
+    # Old installed native extensions emitted VTK/cyclic order.  Do not call
+    # them silently: the pure-Python implementation below is the authoritative
+    # COMSOL Mesh-v4 tensor-product order.
+    return structured_comsol_hex_rows(shape, start, stop)
 
 
 def _stream_volume_elements(handle: TextIO, shape: tuple[int, int, int], kind: str, chunk: int) -> None:
     total = int(np.prod(shape))
-    # Six conforming tetrahedra around the 000--111 body diagonal, expressed
-    # in COMSOL tensor Hex8 local numbering.
-    pattern = np.asarray(
-        [[0,1,3,7],[0,3,2,7],[0,2,6,7],[0,6,4,7],[0,4,5,7],[0,5,1,7]],
-        dtype=np.int64,
-    )
+    pattern = COMSOL_HEX8_TO_TET4
     for start in range(0, total, chunk):
         hexes = _hex_rows(shape, start, min(total, start + chunk))
         rows = hexes if kind == "hex8" else hexes[:, pattern].reshape(-1, 4)
@@ -903,10 +974,13 @@ def _safe_name(value: object) -> str:
 __all__ = [
     "GeneralCOMSOLExportReport",
     "HexTopologyAudit",
+    "HexTopologyValidationReport",
     "LargeVoxelMeshPlan",
     "audit_comsol_hex8_connectivity",
     "audit_comsol_hex8_topology",
     "plan_large_voxel_mesh",
+    "validate_comsol_hex_connectivity",
+    "validate_structured_hex_topology",
     "write_general_comsol_mphtxt",
     "write_large_voxel_comsol_mphtxt",
 ]

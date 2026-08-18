@@ -57,6 +57,23 @@ zynmorph-tetgen = [
   "scipy>=1.10",
 ]
 
+zynmorph-microstructure = [
+  "scipy>=1.10",
+  "torch>=2.2",
+  "h5py>=3.10",
+  "tifffile>=2024.1",
+  "matplotlib>=3.8",
+]
+
+zynmorph-all = [
+  "scipy>=1.10",
+  "torch>=2.2",
+  "h5py>=3.10",
+  "tifffile>=2024.1",
+  "matplotlib>=3.8",
+  "scikit-image>=0.22",
+]
+
 io = ["ase>=3.23"]
 
 graph = [

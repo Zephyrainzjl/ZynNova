@@ -30,6 +30,9 @@ def test_conditional_microstructure_exact_counts_percolation_and_fem(tmp_path) -
         output_directory=str(tmp_path / "runs"),
         export_volume_formats=("npz", "npy", "raw", "tiff"),
         export_mesh_formats=("vtk", "msh", "inp"),
+        # This legacy regression explicitly verifies the six-Tet4/voxel path.
+        # Production defaults use native TetGen and are covered separately.
+        mesh_backend="structured",
         maximum_tetrahedra=10_000,
     )
     result = run_zynmorph(condition, config)

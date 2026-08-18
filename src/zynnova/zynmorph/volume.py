@@ -51,6 +51,80 @@ class MicrostructureVolume:
         assert isinstance(spacing, tuple)
         return tuple(self.shape[axis] * spacing[axis] for axis in range(3))
 
+
+    def remap_regions(
+        self,
+        mapping: Mapping[int, int],
+        *,
+        region_names: Mapping[int, str] | None = None,
+        require_complete: bool = False,
+    ) -> "MicrostructureVolume":
+        """Return a copy whose label IDs are collapsed into material regions.
+
+        This is deliberately applied *before* PLC extraction.  It therefore
+        removes artificial interfaces between objects that are geometrically
+        distinct but belong to the same FEM material (for example thirty NMC
+        particles carrying thirty tracking IDs that must become one COMSOL
+        domain).  Unmapped labels are preserved unless ``require_complete`` is
+        requested.
+        """
+
+        normalized = {int(source): int(target) for source, target in mapping.items()}
+        phases = set(self.phases)
+        unknown_sources = set(normalized) - phases
+        if unknown_sources:
+            raise ValueError(
+                "region remap contains labels absent from the volume: "
+                f"{sorted(unknown_sources)}"
+            )
+        if require_complete:
+            missing = phases - set(normalized)
+            if missing:
+                raise ValueError(
+                    "region remap does not cover all labels: "
+                    f"{sorted(missing)}"
+                )
+
+        remapped = self.labels.copy()
+        original = self.labels
+        for source, target in normalized.items():
+            remapped[original == source] = target
+
+        output_phases = tuple(map(int, np.unique(remapped)))
+        supplied_names = {
+            int(key): str(value) for key, value in (region_names or {}).items()
+        }
+        names: dict[int, str] = {}
+        inverse: dict[int, list[int]] = {}
+        for source in phases:
+            target = normalized.get(source, source)
+            inverse.setdefault(target, []).append(source)
+        for target in output_phases:
+            if target in supplied_names:
+                names[target] = supplied_names[target]
+                continue
+            sources = inverse.get(target, [target])
+            source_names = [self.phase_names.get(source) for source in sources]
+            source_names = [name for name in source_names if name]
+            names[target] = (
+                source_names[0]
+                if len(set(source_names)) == 1
+                else self.phase_names.get(target, f"region_{target}")
+            )
+
+        return MicrostructureVolume(
+            labels=remapped,
+            voxel_size_m=self.voxel_size_m,
+            origin_m=self.origin_m,
+            phase_names=names,
+            metadata={
+                **self.metadata,
+                "region_remap": normalized,
+                "source_phases": tuple(sorted(phases)),
+                "material_phases": output_phases,
+            },
+        )
+
     def save_npz(self, path: str | Path) -> Path:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)

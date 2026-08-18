@@ -112,7 +112,8 @@ py::dict tetrahedralize_plc(
     const int maximum_steiner_points,
     const bool consistency_check,
     const bool conforming_delaunay,
-    const bool quiet) {
+    const bool quiet,
+    const bool preserve_boundary_facets) {
   const auto point_info = points.request();
   const auto facet_info = facets.request();
   const auto marker_info = facet_markers.request();
@@ -277,6 +278,12 @@ py::dict tetrahedralize_plc(
   if (conforming_delaunay) {
     switches << "D";
   }
+  if (preserve_boundary_facets) {
+    // TetGen -Y: suppress Steiner insertion on PLC boundary facets.  The
+    // official manual recommends this when very close facets would otherwise
+    // self-intersect after boundary splitting.
+    switches << "Y";
+  }
   if (consistency_check) {
     switches << "C";
   }
@@ -390,6 +397,8 @@ PYBIND11_MODULE(_zynmorph_tetgen_native, module) {
       "ZynMorph pybind11 interface to the vendored TetGen 1.6.0 C++ kernel";
   module.attr("tetgen_version") = "TetGen 1.6.0";
   module.attr("tetgen_license") = "AGPL-3.0-or-later";
+  module.attr("tetgen_binding_abi") = 2;
+  module.attr("zynnova_binding_abi") = 1;
   module.def(
       "tetrahedralize",
       &tetrahedralize_plc,
@@ -407,6 +416,7 @@ PYBIND11_MODULE(_zynmorph_tetgen_native, module) {
       py::arg("consistency_check") = true,
       py::arg("conforming_delaunay") = true,
       py::arg("quiet") = true,
+      py::arg("preserve_boundary_facets") = false,
       R"doc(
 Generate a region-partitioned adaptive Tet4 mesh from a triangular PLC.
 

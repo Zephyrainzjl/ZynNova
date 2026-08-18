@@ -132,6 +132,12 @@ class JunctionRegularizationReport:
     phase_counts_before: Mapping[int, int]
     phase_counts_after: Mapping[int, int]
     changes: tuple[tuple[int, int, int, int, int], ...]
+    initial_change_budget_fraction: float = 0.0
+    final_change_budget_fraction: float = 0.0
+    hard_change_budget_fraction: float = 0.0
+    budget_expansions: int = 0
+    termination_reason: str = "unknown"
+    maximum_phase_fraction_drift: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -523,6 +529,80 @@ def audit_multiphase_plc(
     )
 
 
+
+
+def lock_plc_interfaces(
+    plc: MultiphasePLC,
+    region_pairs: Sequence[tuple[int, int]],
+    *,
+    require_present: bool = True,
+) -> MultiphasePLC:
+    """Freeze all vertices on selected material interfaces before smoothing.
+
+    The region-pair order is ignored.  This is useful for geometrically exact
+    interfaces such as cathode/separator and separator/anode planes, but is
+    intentionally generic and works for any pair of material IDs in any
+    complex PLC.
+    """
+
+    normalized = tuple(
+        sorted(
+            {
+                tuple(sorted((int(pair[0]), int(pair[1]))))
+                for pair in region_pairs
+                if len(pair) == 2 and int(pair[0]) != int(pair[1])
+            }
+        )
+    )
+    if len(normalized) != len(region_pairs):
+        for pair in region_pairs:
+            if len(pair) != 2 or int(pair[0]) == int(pair[1]):
+                raise ValueError(
+                    "each locked interface must contain two distinct region IDs"
+                )
+    if not normalized:
+        return plc
+
+    fixed = np.asarray(plc.fixed_vertices, dtype=bool).copy()
+    matched_pairs: set[tuple[int, int]] = set()
+    matched_faces = 0
+    wanted = set(normalized)
+    for face_index, (left, right) in enumerate(
+        zip(plc.left_regions, plc.right_regions, strict=True)
+    ):
+        pair = tuple(sorted((int(left), int(right))))
+        if pair not in wanted:
+            continue
+        fixed[plc.triangles[face_index]] = True
+        matched_pairs.add(pair)
+        matched_faces += 1
+
+    missing = wanted - matched_pairs
+    if missing and require_present:
+        raise GeometryError(
+            "requested locked PLC interfaces are absent: "
+            f"{sorted(missing)}"
+        )
+
+    return MultiphasePLC(
+        vertices=plc.vertices,
+        triangles=plc.triangles,
+        facet_markers=plc.facet_markers,
+        left_regions=plc.left_regions,
+        right_regions=plc.right_regions,
+        outside_region=plc.outside_region,
+        marker_names=plc.marker_names,
+        marker_region_pairs=plc.marker_region_pairs,
+        fixed_vertices=fixed,
+        metadata={
+            **plc.metadata,
+            "locked_interface_pairs": normalized,
+            "locked_interface_faces": int(matched_faces),
+            "locked_interface_vertices": int(np.count_nonzero(fixed)),
+        },
+    )
+
+
 def smooth_multiphase_plc(
     plc: MultiphasePLC,
     *,
@@ -672,48 +752,97 @@ def regularize_nonmanifold_junctions(
     preserve_outer_layer: bool = False,
     minimum_phase_voxels: int = 8,
     phase_change_penalties: Mapping[int, float] | None = None,
+    adaptive_budget: bool = True,
+    hard_maximum_changed_fraction: float = 0.05,
+    budget_growth_factor: float = 2.0,
     strict: bool = True,
 ) -> tuple[MicrostructureVolume, JunctionRegularizationReport]:
-    """Remove edge-only diagonal contacts with minimal deterministic relabeling.
+    """Remove edge-only diagonal contacts with deterministic minimal relabeling.
 
-    A four-voxel checkerboard around a grid edge is not a valid manifold PLC.
-    The routine changes one locally weak voxel at a time, always choosing an
-    already adjacent phase and recording every operation.  It is intentionally
-    conservative: if the requested change budget cannot make the topology
-    manifold, ``strict=True`` raises instead of feeding invalid input to TetGen.
+    Complex stochastic microstructures can contain hundreds or thousands of
+    checkerboard edge contacts.  ``maximum_changed_fraction`` is therefore the
+    *initial* conservative budget.  With ``adaptive_budget=True`` (the default),
+    the budget grows only when it is actually exhausted, up to
+    ``hard_maximum_changed_fraction``.  This preserves the old conservative
+    behaviour for easy geometries while allowing difficult MCS-style particle /
+    CBD / electrolyte volumes to become a valid manifold PLC without forcing
+    every caller to guess a suitable budget.
+
+    The repair always changes a voxel to an already adjacent material, honours
+    per-phase penalties and minimum phase populations, records every edit, and
+    never silently accepts a non-manifold result when ``strict=True``.
     """
 
     if not 0.0 <= maximum_changed_fraction <= 1.0:
         raise ValueError("maximum_changed_fraction must lie in [0, 1]")
+    if not 0.0 <= hard_maximum_changed_fraction <= 1.0:
+        raise ValueError("hard_maximum_changed_fraction must lie in [0, 1]")
+    if hard_maximum_changed_fraction < maximum_changed_fraction:
+        raise ValueError(
+            "hard_maximum_changed_fraction cannot be smaller than "
+            "maximum_changed_fraction"
+        )
     if maximum_iterations < 1:
         raise ValueError("maximum_iterations must be positive")
     if minimum_phase_voxels < 1:
         raise ValueError("minimum_phase_voxels must be positive")
+    if adaptive_budget and (not np.isfinite(budget_growth_factor) or budget_growth_factor <= 1.0):
+        raise ValueError("budget_growth_factor must be finite and greater than one")
 
     original = np.ascontiguousarray(volume.labels, dtype=np.int32)
     labels = original.copy()
     values, counts = np.unique(labels, return_counts=True)
-    phase_counts = {int(value): int(count) for value, count in zip(values, counts, strict=True)}
+    phase_counts = {
+        int(value): int(count)
+        for value, count in zip(values, counts, strict=True)
+    }
     before_counts = dict(phase_counts)
-    penalties = {int(key): float(value) for key, value in (phase_change_penalties or {}).items()}
+    penalties = {
+        int(key): float(value)
+        for key, value in (phase_change_penalties or {}).items()
+    }
     before_events = _ambiguous_edge_events(labels)
     before = len(before_events)
-    maximum_changes = int(np.floor(maximum_changed_fraction * labels.size))
-    if before and maximum_changes < 1:
-        maximum_changes = 1
+
+    initial_maximum_changes = int(np.floor(maximum_changed_fraction * labels.size))
+    hard_maximum_changes = int(np.floor(hard_maximum_changed_fraction * labels.size))
+    if before and initial_maximum_changes < 1:
+        initial_maximum_changes = 1
+    if before and hard_maximum_changes < 1:
+        hard_maximum_changes = 1
+    hard_maximum_changes = max(initial_maximum_changes, hard_maximum_changes)
+    current_maximum_changes = initial_maximum_changes
+
     changes: list[tuple[int, int, int, int, int]] = []
     operations = 0
+    budget_expansions = 0
+    termination_reason = "not-started"
 
     changed_coordinates: set[tuple[int, int, int]] = set()
     previous_ambiguity = before
     while operations < maximum_iterations:
         events = _ambiguous_edge_events(labels)
         if not events:
-            break
-        if len(changed_coordinates) >= maximum_changes:
+            termination_reason = "converged"
             break
 
-        # Aggregate every legal repair proposal.  A proposal may resolve several
+        if len(changed_coordinates) >= current_maximum_changes:
+            if adaptive_budget and current_maximum_changes < hard_maximum_changes:
+                # Grow conservatively, but use the current ambiguity count to avoid
+                # dozens of tiny expansions for highly disordered multiphase data.
+                ambiguity_allowance = int(np.ceil(0.35 * len(events)))
+                grown = max(
+                    current_maximum_changes + 1,
+                    int(np.ceil(current_maximum_changes * budget_growth_factor)),
+                    len(changed_coordinates) + ambiguity_allowance,
+                )
+                current_maximum_changes = min(hard_maximum_changes, grown)
+                budget_expansions += 1
+            else:
+                termination_reason = "change-budget-exhausted"
+                break
+
+        # Aggregate every legal repair proposal. A proposal may resolve several
         # checkerboard edges at once, so event support is included in its score.
         proposals: dict[tuple[tuple[int, int, int], int], list[float]] = {}
         for event in events:
@@ -736,11 +865,18 @@ def regularize_nonmanifold_junctions(
                 neighbors = _neighbor_values(labels, coordinate)
                 support_target = int(np.count_nonzero(neighbors == target))
                 support_source = int(np.count_nonzero(neighbors == source))
+
+                # Dynamic balance term discourages systematic material-fraction
+                # drift while still allowing the local topology to converge.
+                source_delta = phase_counts.get(source, 0) - before_counts.get(source, 0)
+                target_delta = phase_counts.get(target, 0) - before_counts.get(target, 0)
+                balance = 0.35 * (target_delta - source_delta) / max(1, labels.size)
                 score = (
                     4.0 * support_target
                     - 2.0 * support_source
                     - penalties.get(source, 0.0)
                     - 0.25 * penalties.get(target, 0.0)
+                    - balance
                 )
                 proposals.setdefault((coordinate, target), []).append(score)
 
@@ -767,23 +903,25 @@ def regularize_nonmanifold_junctions(
                 ranked.append(item)
             elif gain == 0:
                 plateau.append(item)
-        ranked.sort(key=lambda item: (-item[0], -item[1], item[2], item[3], item[4]))
+        ranked.sort(
+            key=lambda item: (-item[0], -item[1], item[2], item[3], item[4])
+        )
         plateau.sort(key=lambda item: (-item[1], item[2], item[3], item[4]))
         use_plateau_escape = not ranked and bool(plateau)
         if not ranked and not plateau:
+            termination_reason = "no-legal-repair-proposal"
             break
         if use_plateau_escape:
             # Some multi-label junctions require one topology-neutral move before
-            # a strictly improving edit exists.  Apply exactly one deterministic
+            # a strictly improving edit exists. Apply exactly one deterministic
             # zero-gain move and never revisit that voxel.
             ranked = [plateau[0]]
 
-        # Select an independent batch.  Chebyshev radius two prevents the local
-        # 3x3x3 ambiguity neighborhoods of two edits from overlapping, so their
-        # positive gains remain additive when applied simultaneously.
+        # Select an independent batch. Chebyshev radius two prevents the local
+        # 3x3x3 ambiguity neighborhoods of two edits from overlapping.
         selected: list[tuple[int, float, tuple[int, int, int], int, int]] = []
         blocked: set[tuple[int, int, int]] = set()
-        remaining_budget = maximum_changes - len(changed_coordinates)
+        remaining_budget = current_maximum_changes - len(changed_coordinates)
         remaining_operations = maximum_iterations - operations
         batch_limit = min(
             1 if use_plateau_escape else 512,
@@ -803,6 +941,7 @@ def regularize_nonmanifold_junctions(
             if len(selected) >= batch_limit:
                 break
         if not selected:
+            termination_reason = "no-independent-repair-batch"
             break
 
         snapshot: list[tuple[tuple[int, int, int], int, int]] = []
@@ -816,12 +955,11 @@ def regularize_nonmanifold_junctions(
 
         current_ambiguity = count_nonmanifold_voxel_edges(labels)
         if current_ambiguity > previous_ambiguity:
-            # Positive-gain independent batches must reduce the count; a single
-            # plateau escape may keep it unchanged, but it may never increase it.
             for coordinate, source, target in reversed(snapshot):
                 labels[coordinate] = source
                 phase_counts[source] += 1
                 phase_counts[target] -= 1
+            termination_reason = "repair-batch-increased-ambiguity"
             break
 
         for coordinate, source, target in snapshot:
@@ -830,11 +968,29 @@ def regularize_nonmanifold_junctions(
             changes.append((z, y, x, source, target))
         operations += len(snapshot)
         previous_ambiguity = current_ambiguity
+    else:
+        termination_reason = "maximum-iterations-exhausted"
 
     after = count_nonmanifold_voxel_edges(labels)
     changed_mask = labels != original
     changed_voxels = int(np.count_nonzero(changed_mask))
     converged = after == 0
+    if converged:
+        termination_reason = "converged"
+
+    after_counts = {
+        int(value): int(count)
+        for value, count in zip(*np.unique(labels, return_counts=True), strict=True)
+    }
+    all_phases = set(before_counts) | set(after_counts)
+    maximum_phase_fraction_drift = max(
+        (
+            abs(after_counts.get(phase, 0) - before_counts.get(phase, 0))
+            / labels.size
+            for phase in all_phases
+        ),
+        default=0.0,
+    )
     report = JunctionRegularizationReport(
         ambiguous_edges_before=before,
         ambiguous_edges_after=after,
@@ -843,17 +999,27 @@ def regularize_nonmanifold_junctions(
         iterations=operations,
         converged=converged,
         phase_counts_before=before_counts,
-        phase_counts_after={
-            int(value): int(count)
-            for value, count in zip(*np.unique(labels, return_counts=True), strict=True)
-        },
+        phase_counts_after=after_counts,
         changes=tuple(changes),
+        initial_change_budget_fraction=float(initial_maximum_changes / labels.size),
+        final_change_budget_fraction=float(current_maximum_changes / labels.size),
+        hard_change_budget_fraction=float(hard_maximum_changes / labels.size),
+        budget_expansions=budget_expansions,
+        termination_reason=termination_reason,
+        maximum_phase_fraction_drift=float(maximum_phase_fraction_drift),
     )
     if strict and not converged:
         raise GeometryError(
-            "could not regularize non-manifold voxel junctions within the allowed budget: "
+            "could not regularize non-manifold voxel junctions: "
             f"before={before}, after={after}, changed={changed_voxels}/"
-            f"{labels.size} ({report.changed_fraction:.3%})"
+            f"{labels.size} ({report.changed_fraction:.3%}), "
+            f"initial_budget={report.initial_change_budget_fraction:.3%}, "
+            f"final_budget={report.final_change_budget_fraction:.3%}, "
+            f"hard_budget={report.hard_change_budget_fraction:.3%}, "
+            f"expansions={budget_expansions}, reason={termination_reason}. "
+            "For deliberately topology-dense inputs, increase "
+            "junction_hard_maximum_changed_fraction or protect critical phases "
+            "with junction_phase_change_penalties."
         )
     regularized = MicrostructureVolume(
         labels=labels,
@@ -868,6 +1034,12 @@ def regularize_nonmanifold_junctions(
                 "changed_voxels": changed_voxels,
                 "changed_fraction": report.changed_fraction,
                 "converged": converged,
+                "initial_change_budget_fraction": report.initial_change_budget_fraction,
+                "final_change_budget_fraction": report.final_change_budget_fraction,
+                "hard_change_budget_fraction": report.hard_change_budget_fraction,
+                "budget_expansions": budget_expansions,
+                "termination_reason": termination_reason,
+                "maximum_phase_fraction_drift": report.maximum_phase_fraction_drift,
             },
         },
     )
@@ -982,6 +1154,7 @@ __all__ = [
     "audit_multiphase_plc",
     "count_nonmanifold_voxel_edges",
     "extract_multiphase_plc",
+    "lock_plc_interfaces",
     "regularize_nonmanifold_junctions",
     "smooth_multiphase_plc",
 ]
