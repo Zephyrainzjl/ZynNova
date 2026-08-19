@@ -18,6 +18,7 @@ option(
   "Build the AGPL TetGen 1.6.0 adaptive meshing extension"
   ON
 )
+option(ZYNNOVA_BUILD_CPP_TESTS "Build native C++ tests" OFF)
 set(
   ZYNNOVA_TETGEN_SOURCE_DIR
   ""
@@ -29,25 +30,16 @@ option(
   "Fetch the pinned TetGen source when no vendored source directory exists"
   ON
 )
-option(ZYNNOVA_BUILD_CPP_TESTS "Build native C++ tests" OFF)
-option(
-  ZYNNOVA_BUILD_ZIVAR_KOKKOS
-  "Build the experimental Ziver matrix-free Kokkos numerical core"
-  OFF
-)
 
 if(ZYNNOVA_BUILD_NATIVE OR ZYNNOVA_BUILD_TETGEN)
   find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
   find_package(pybind11 CONFIG REQUIRED)
 endif()
 
-if(
-  ZYNNOVA_BUILD_CPP_TESTS
-  AND (ZYNNOVA_BUILD_NATIVE OR ZYNNOVA_BUILD_TETGEN OR ZYNNOVA_BUILD_ZIVAR_KOKKOS)
-)
+if(ZYNNOVA_BUILD_CPP_TESTS AND (ZYNNOVA_BUILD_NATIVE OR ZYNNOVA_BUILD_TETGEN))
   enable_testing()
 endif()
 
-if(ZYNNOVA_BUILD_NATIVE OR ZYNNOVA_BUILD_TETGEN OR ZYNNOVA_BUILD_ZIVAR_KOKKOS)
+if(ZYNNOVA_BUILD_NATIVE OR ZYNNOVA_BUILD_TETGEN)
   add_subdirectory(cpp)
 endif()
