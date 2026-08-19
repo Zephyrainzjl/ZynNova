@@ -40,7 +40,29 @@ from .tts_schema import TTSConfig, TTSRequest
 from .tts_types import TTSBackendOutput, TTSResult
 from .types import VoiceBackendOutput, VoiceResult
 
+from .studio import (
+    CommandVoiceEngine, DatasetPrepareConfig, GenerationRequest, GenerationResult,
+    GPTSoVITSLocalConfig, GPTSoVITSLocalEngine,
+    LegacyZynVoxEngine, TrainingConfig, TrainingResult, VoiceEngineProfile,
+    VoiceProfile, VoiceWorkspace, ZynVoxStudio, prepare_dataset, train_voice_model,
+)
+
 __all__ = [
+    "GPTSoVITSLocalConfig",
+    "GPTSoVITSLocalEngine",
+    "train_voice_model",
+    "prepare_dataset",
+    "ZynVoxStudio",
+    "VoiceWorkspace",
+    "VoiceProfile",
+    "VoiceEngineProfile",
+    "TrainingResult",
+    "TrainingConfig",
+    "LegacyZynVoxEngine",
+    "GenerationResult",
+    "GenerationRequest",
+    "DatasetPrepareConfig",
+    "CommandVoiceEngine",
     "ComparisonReport",
     "ComparisonThresholds",
     "ConsentBasis",

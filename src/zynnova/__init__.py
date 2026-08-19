@@ -1,33 +1,26 @@
 """ZynNova public package.
 
-ZynNova combines materials representation, datasets, machine learning, atomistic
-simulation, battery multiphysics, conditional microstructure generation,
-image-conditioned 3-D reconstruction, object-to-FEM workflows, and consent-aware
-voice conversion behind one extensible Python namespace.
+ZynNova combines materials intelligence, simulation, generative 3D/scene workflows,
+consent-aware speech, and provider-neutral LLM agents behind one extensible namespace.
 """
-
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 from pkgutil import extend_path
 from typing import Mapping
 
-# Support split editable installs: Python sources can live in the checkout while
-# CMake-installed native extensions live in the editable wheel/install tree.
 __path__ = extend_path(__path__, __name__)
 
 try:
     __version__ = version("zynnova")
-except PackageNotFoundError:  # source checkout without installation
-    __version__ = "0.2.0"
+except PackageNotFoundError:
+    __version__ = "0.3.0"
 
-from . import core, geometry, zynform, zynmorph, zynsim, zynvista, zynvox
+from . import core, geometry, llm, zynform, zynmorph, zynsim, zynvista, zynvox
 from .structure import GraphData, StructureData
 
-
 def backend_status() -> Mapping[str, object]:
-    """Return side-effect-free diagnostics for every registered difficult-task backend."""
-
+    """Return side-effect-free diagnostics for registered difficult-task backends."""
     return {
         "zynnova_version": __version__,
         "zynmorph": zynmorph.BACKENDS.status(),
@@ -37,19 +30,10 @@ def backend_status() -> Mapping[str, object]:
         "zynform": zynform.OBJECT_BACKENDS.status(),
         "zynvox_conversion": zynvox.VOICE_BACKENDS.status(),
         "zynvox_tts": zynvox.TTS_BACKENDS.status(),
+        "llm_frameworks": ("zynastra",),
     }
 
-
 __all__ = [
-    "GraphData",
-    "StructureData",
-    "__version__",
-    "backend_status",
-    "core",
-    "geometry",
-    "zynform",
-    "zynmorph",
-    "zynsim",
-    "zynvista",
-    "zynvox",
+    "GraphData", "StructureData", "__version__", "backend_status", "core",
+    "geometry", "llm", "zynform", "zynmorph", "zynsim", "zynvista", "zynvox",
 ]

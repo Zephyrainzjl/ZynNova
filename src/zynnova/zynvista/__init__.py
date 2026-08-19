@@ -17,7 +17,22 @@ from .types import DenseView, SceneBackendOutput
 from .video import extract_video_frames
 from .world import WorldChunkRecord, WorldIndex, export_world_hierarchy
 
+from .external import (
+    CommandSceneEngine, GenerativeSceneRequest, PythonSceneEngine,
+    SceneAssetBundle, SceneEngineProfile,
+)
+from .model_hub import download_scene_model, scene_workspace
+from .studio import SceneStudio
+
 __all__ = [
+    "scene_workspace",
+    "download_scene_model",
+    "SceneStudio",
+    "SceneEngineProfile",
+    "SceneAssetBundle",
+    "PythonSceneEngine",
+    "GenerativeSceneRequest",
+    "CommandSceneEngine",
     "DenseView",
     "GeometryFingerprint",
     "GENERATION_BACKENDS",

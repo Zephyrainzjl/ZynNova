@@ -14,7 +14,18 @@ from .scaling import (
 from .schema import FEMConfig, FEMMethod, ObjectConfig, ObjectRequest, PhysicalScaleBasis
 from .types import ObjectBackendOutput, ObjectResult
 
+from .external import CommandObjectEngine, GenerativeObjectRequest, ObjectAssetBundle, ObjectEngineProfile
+from .model_hub import download_object_model, object_workspace
+from .studio import ObjectStudio
+
 __all__ = [
+    "object_workspace",
+    "download_object_model",
+    "ObjectStudio",
+    "ObjectEngineProfile",
+    "ObjectAssetBundle",
+    "GenerativeObjectRequest",
+    "CommandObjectEngine",
     "FEMConfig",
     "FEMMeshingError",
     "FEMMethod",
