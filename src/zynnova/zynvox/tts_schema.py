@@ -114,6 +114,7 @@ class TTSConfig:
     peak_dbfs: float | None = -1.0
     benchmark: bool = True
     provenance_sidecar: bool = True
+    embed_disclosure_marker: bool = True
     preserve_raw_backend_audio: bool = True
     backend_options: Mapping[str, object] = field(default_factory=dict)
 
@@ -122,6 +123,10 @@ class TTSConfig:
             raise ConfigurationError("output_sample_rate must be at least 8000 Hz")
         if self.peak_dbfs is not None and not -30.0 <= self.peak_dbfs <= 0.0:
             raise ConfigurationError("peak_dbfs must lie in [-30, 0] or be None")
+        if not self.provenance_sidecar:
+            raise ConfigurationError(
+                "ZynVox TTS requires a provenance sidecar for synthesized speech"
+            )
         object.__setattr__(self, "backend_options", dict(self.backend_options))
 
 

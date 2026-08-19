@@ -91,3 +91,52 @@ def test_tts_baseline_audit_and_benchmark(tmp_path, wav_factory) -> None:
     assert payload["requested_text"] == "This is a deterministic plumbing test."
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "completed"
+
+
+def test_non_self_voice_requires_evidence(tmp_path, wav_factory) -> None:
+    source = wav_factory(tmp_path / "source_nonself.wav", frequency_hz=200.0)
+    reference = wav_factory(tmp_path / "reference_nonself.wav", frequency_hz=300.0)
+    request = VoiceRequest(
+        source_audio=source,
+        target_reference=reference,
+        consent=ConsentRecord(
+            confirmed=True,
+            basis=ConsentBasis.DIRECT_AUTHORIZATION,
+            purpose="authorized research comparison",
+        ),
+        backend="identity-baseline",
+    )
+    with pytest.raises(ConsentRequiredError):
+        run_voice_conversion(
+            request,
+            VoiceConfig(
+                output_directory=str(tmp_path / "voice-policy"),
+                backend_options={"allow_baseline": True},
+            ),
+        )
+
+
+def test_voice_output_has_embedded_disclosure_and_v2_provenance(tmp_path, wav_factory) -> None:
+    from zynnova.zynvox import has_wav_disclosure
+
+    source = wav_factory(tmp_path / "source_disclosure.wav", frequency_hz=210.0)
+    reference = wav_factory(tmp_path / "reference_disclosure.wav", frequency_hz=310.0)
+    result = run_voice_conversion(
+        VoiceRequest(
+            source_audio=source,
+            target_reference=reference,
+            consent=_consent(),
+            backend="identity-baseline",
+        ),
+        VoiceConfig(
+            output_directory=str(tmp_path / "voice-disclosure"),
+            backend_options={"allow_baseline": True},
+        ),
+    )
+    assert has_wav_disclosure(result.output_audio)
+    payload = json.loads(result.provenance_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == "zynnova.voice-provenance/2.0"
+    assert payload["media_disclosure"]["embedded_marker"] is True
+    assert payload["media_disclosure"]["robust_watermark"] is False
+    assert payload["consent"]["record_id"]
+    assert payload["record_sha256"]

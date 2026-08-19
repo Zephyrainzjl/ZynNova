@@ -56,3 +56,39 @@ def test_image_to_object_surface_multiformat_and_fem(tmp_path, image_factory) ->
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "completed"
     assert any(event["name"] == "fem_generated" for event in manifest["events"])
+
+
+def test_physical_scale_evidence_and_fem_render_tracks(tmp_path, image_factory) -> None:
+    from zynnova.zynform import PhysicalScaleBasis
+
+    image = image_factory(tmp_path / "scaled_object.png", size=24)
+    evidence = tmp_path / "scale_record.txt"
+    evidence.write_text("calibration target width = 0.25 m", encoding="utf-8")
+    result = run_object(
+        ObjectRequest(
+            image=image,
+            backend="silhouette-extrusion-baseline",
+            physical_extent_m=0.25,
+            physical_scale_basis=PhysicalScaleBasis.CALIBRATION_TARGET,
+            physical_scale_evidence=evidence,
+        ),
+        ObjectConfig(
+            output_directory=str(tmp_path / "scaled-runs"),
+            export_formats=("ply",),
+            generate_fem=True,
+            fem=FEMConfig(
+                method=FEMMethod.VOXEL,
+                voxel_pitch=0.05,
+                maximum_cells=100_000,
+            ),
+            fem_export_formats=("npz",),
+            backend_options={"maximum_image_size": 24, "depth_ratio": 0.25},
+        ),
+    )
+    extent = result.surface_mesh.vertices.max(axis=0) - result.surface_mesh.vertices.min(axis=0)
+    assert abs(float(extent.max()) - 0.25) < 1.0e-10
+    assert result.fem_surface_mesh is not None
+    assert result.exported_fem_surface_files
+    assert all(path.is_file() for path in result.exported_fem_surface_files)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["provenance"]["physical_scale_evidence"]["sha256"]

@@ -47,6 +47,7 @@ def create_ui() -> object:
         python_executable: str,
         consent_basis: str,
         purpose: str,
+        consent_evidence: str | None,
         consent_confirmed: bool,
         options_json: str,
     ) -> tuple[str, str]:
@@ -65,6 +66,7 @@ def create_ui() -> object:
                     confirmed=consent_confirmed,
                     basis=ConsentBasis(consent_basis),
                     purpose=purpose,
+                    evidence=None if not consent_evidence else Path(consent_evidence),
                 ),
             ),
             VoiceConfig(backend_options=options),
@@ -88,6 +90,7 @@ def create_ui() -> object:
         python_executable: str,
         consent_basis: str,
         purpose: str,
+        consent_evidence: str | None,
         consent_confirmed: bool,
         options_json: str,
     ) -> tuple[str, str]:
@@ -117,6 +120,7 @@ def create_ui() -> object:
                     confirmed=consent_confirmed,
                     basis=ConsentBasis(consent_basis),
                     purpose=purpose,
+                    evidence=None if not consent_evidence else Path(consent_evidence),
                 ),
             ),
             TTSConfig(backend_options=options),
@@ -156,6 +160,10 @@ def create_ui() -> object:
                     vc_purpose = gr.Textbox(
                         label="Authorized purpose", value="research evaluation"
                     )
+                vc_evidence = gr.File(
+                    label="Authorization/license/source evidence (required for non-self)",
+                    type="filepath",
+                )
                 vc_consent = gr.Checkbox(label="I confirm ownership or explicit permission/license.")
                 vc_submit = gr.Button("Convert")
                 vc_output = gr.Audio(label="Converted output", type="filepath")
@@ -171,6 +179,7 @@ def create_ui() -> object:
                         vc_python,
                         vc_basis,
                         vc_purpose,
+                        vc_evidence,
                         vc_consent,
                         vc_options,
                     ],
@@ -220,6 +229,10 @@ def create_ui() -> object:
                     tts_purpose = gr.Textbox(
                         label="Authorized purpose", value="research evaluation"
                     )
+                tts_evidence = gr.File(
+                    label="Authorization/license/source evidence (required for non-self)",
+                    type="filepath",
+                )
                 tts_consent = gr.Checkbox(label="I confirm ownership or explicit permission/license.")
                 tts_submit = gr.Button("Synthesize")
                 tts_output = gr.Audio(label="Synthesized output", type="filepath")
@@ -243,6 +256,7 @@ def create_ui() -> object:
                         tts_python,
                         tts_basis,
                         tts_purpose,
+                        tts_evidence,
                         tts_consent,
                         tts_options,
                     ],

@@ -10,7 +10,14 @@ from typing import Any, Sequence
 
 from . import __version__, backend_status
 from .core.serialization import dump_json, to_jsonable
-from .zynform import FEMConfig, FEMMethod, ObjectConfig, ObjectRequest, run_object
+from .zynform import (
+    FEMConfig,
+    FEMMethod,
+    ObjectConfig,
+    ObjectRequest,
+    PhysicalScaleBasis,
+    run_object,
+)
 from .zynmorph import GenerationConfig, MicrostructureCondition, run_zynmorph
 from .zynvista import SceneConfig, SceneMode, SceneRequest, run_scene
 from .zynvox import (
@@ -76,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
     scene.add_argument("--backend", default="auto")
     scene.add_argument("--output", default="zynnova_runs/zynvista")
     scene.add_argument("--formats", default="ply,obj,glb")
+    scene.add_argument("--video-sample-fps", type=float, default=2.0)
+    scene.add_argument("--video-max-frames", type=int, default=96)
+    scene.add_argument("--world-chunk-size-m", type=float, default=25.0)
+    scene.add_argument("--world-lod-levels", type=int, default=3)
+    scene.add_argument("--no-world-hierarchy", action="store_true")
     scene.add_argument("--backend-options", type=_json_object, default={})
 
     object_parser = subparsers.add_parser("object", help="generate and FEM-mesh one 3D object")
@@ -85,6 +97,14 @@ def build_parser() -> argparse.ArgumentParser:
     object_parser.add_argument("--output", default="zynnova_runs/zynform")
     object_parser.add_argument("--formats", default="glb,obj,ply,stl")
     object_parser.add_argument("--fem-method", choices=[item.value for item in FEMMethod], default="auto")
+    object_parser.add_argument("--physical-extent-m", type=float)
+    object_parser.add_argument(
+        "--scale-basis",
+        choices=[item.value for item in PhysicalScaleBasis],
+        default=PhysicalScaleBasis.UNSPECIFIED.value,
+    )
+    object_parser.add_argument("--scale-evidence", type=Path)
+    object_parser.add_argument("--fem-min-mean-ratio", type=float, default=0.0)
     object_parser.add_argument("--no-fem", action="store_true")
     object_parser.add_argument("--backend-options", type=_json_object, default={})
 
@@ -99,6 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     voice.add_argument("--basis", choices=[item.value for item in ConsentBasis], required=True)
     voice.add_argument("--purpose", required=True)
+    voice.add_argument(
+        "--consent-evidence",
+        type=Path,
+        help="authorization/license/source record; required for non-self voice use",
+    )
     voice.add_argument(
         "--confirm-consent",
         action="store_true",
@@ -123,6 +148,11 @@ def build_parser() -> argparse.ArgumentParser:
     tts.add_argument("--streaming", action="store_true")
     tts.add_argument("--basis", choices=[item.value for item in ConsentBasis], required=True)
     tts.add_argument("--purpose", required=True)
+    tts.add_argument(
+        "--consent-evidence",
+        type=Path,
+        help="authorization/license/source record; required for non-self voice use",
+    )
     tts.add_argument("--confirm-consent", action="store_true")
     tts.add_argument("--repository", type=Path)
     tts.add_argument("--model-directory", type=Path)
@@ -173,18 +203,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_directory=args.output,
                 export_formats=tuple(item.strip() for item in args.formats.split(",") if item.strip()),
                 backend_options=args.backend_options,
+                video_sample_fps=args.video_sample_fps,
+                video_max_frames=args.video_max_frames,
+                build_world_hierarchy=not args.no_world_hierarchy,
+                world_chunk_size_m=args.world_chunk_size_m,
+                world_lod_levels=args.world_lod_levels,
             ),
         )
         print(result.run_directory)
         return 0
     if args.command == "object":
         result = run_object(
-            ObjectRequest(image=args.image, prompt=args.prompt, backend=args.backend),
+            ObjectRequest(
+                image=args.image,
+                prompt=args.prompt,
+                backend=args.backend,
+                physical_extent_m=args.physical_extent_m,
+                physical_scale_basis=PhysicalScaleBasis(args.scale_basis),
+                physical_scale_evidence=args.scale_evidence,
+            ),
             ObjectConfig(
                 output_directory=args.output,
                 export_formats=tuple(item.strip() for item in args.formats.split(",") if item.strip()),
                 generate_fem=not args.no_fem,
-                fem=FEMConfig(method=FEMMethod(args.fem_method)),
+                fem=FEMConfig(
+                    method=FEMMethod(args.fem_method),
+                    minimum_mean_ratio=args.fem_min_mean_ratio,
+                ),
                 backend_options=args.backend_options,
             ),
         )
@@ -205,6 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 confirmed=args.confirm_consent,
                 basis=ConsentBasis(args.basis),
                 purpose=args.purpose,
+                evidence=args.consent_evidence,
             ),
         )
         result = run_voice_conversion(
@@ -238,6 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     confirmed=args.confirm_consent,
                     basis=ConsentBasis(args.basis),
                     purpose=args.purpose,
+                    evidence=args.consent_evidence,
                 ),
             ),
             TTSConfig(output_directory=args.output, backend_options=options),

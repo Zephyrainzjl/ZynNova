@@ -355,6 +355,8 @@ zynnova-scene = [
   "pillow>=10.0",
   "trimesh>=4.0",
   "meshio>=5.3",
+  "imageio>=2.37",
+  "imageio-ffmpeg>=0.6",
 ]
 
 zynnova-object = [
@@ -392,6 +394,8 @@ zynnova = [
   "pillow>=10.0",
   "trimesh>=4.0",
   "meshio>=5.3",
+  "imageio>=2.37",
+  "imageio-ffmpeg>=0.6",
   "soundfile>=0.12",
 ]
 

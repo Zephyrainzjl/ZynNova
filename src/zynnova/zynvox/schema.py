@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Mapping
+from uuid import uuid4
 
 from ..core import ConfigurationError, ConsentRequiredError
 
@@ -41,6 +42,7 @@ class ConsentRecord:
     confirmed: bool
     basis: ConsentBasis
     purpose: str
+    record_id: str = field(default_factory=lambda: uuid4().hex)
     recorded_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -52,12 +54,16 @@ class ConsentRecord:
                 "target-speaker authorization must be explicitly confirmed"
             )
         purpose = self.purpose.strip()
+        record_id = self.record_id.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", record_id):
+            raise ConfigurationError("consent record_id must be an auditable identifier")
         if len(purpose) < 3:
             raise ConfigurationError("consent purpose must contain at least 3 characters")
         evidence = None if self.evidence is None else Path(self.evidence)
         if evidence is not None and not evidence.is_file():
             raise FileNotFoundError(evidence)
         object.__setattr__(self, "purpose", purpose)
+        object.__setattr__(self, "record_id", record_id)
         object.__setattr__(self, "evidence", evidence)
 
 
@@ -104,6 +110,7 @@ class VoiceConfig:
     peak_dbfs: float | None = -1.0
     benchmark: bool = True
     provenance_sidecar: bool = True
+    embed_disclosure_marker: bool = True
     preserve_raw_backend_audio: bool = True
     backend_options: Mapping[str, object] = field(default_factory=dict)
 
@@ -112,6 +119,10 @@ class VoiceConfig:
             raise ConfigurationError("output_sample_rate must be at least 8000 Hz")
         if self.peak_dbfs is not None and not -30.0 <= self.peak_dbfs <= 0.0:
             raise ConfigurationError("peak_dbfs must lie in [-30, 0] or be None")
+        if not self.provenance_sidecar:
+            raise ConfigurationError(
+                "ZynVox requires a provenance sidecar for generated/converted speech"
+            )
         object.__setattr__(self, "backend_options", dict(self.backend_options))
 
 

@@ -56,6 +56,20 @@ PUBLIC_STYLE_SOURCES = (
         "venue": "official Nerfstudio extension (2024)",
         "adapter": "InstructGS2GSStyle",
     },
+    {
+        "name": "A3GS",
+        "task": "zero-shot arbitrary artistic style transfer for 3D Gaussian scenes",
+        "source": "paper/external implementation",
+        "venue": "ICCV 2025",
+        "adapter": "ExternalSceneStyle",
+    },
+    {
+        "name": "SGSST",
+        "task": "scalable Gaussian style transfer for ultra-high-resolution scenes",
+        "source": "paper/external implementation",
+        "venue": "CVPR 2025",
+        "adapter": "ExternalSceneStyle",
+    },
 )
 
 

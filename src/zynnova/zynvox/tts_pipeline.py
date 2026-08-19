@@ -9,6 +9,8 @@ from typing import Mapping, Sequence
 from ..core import RunManifest, sha256_file
 from ..core.serialization import to_jsonable
 from .audio import peak_normalize, read_audio, resample, write_wav
+from .disclosure import embed_wav_disclosure
+from .policy import enforce_consent_record
 from .provenance import write_tts_provenance
 from .tts_benchmark import TTSEvaluator, benchmark_tts
 from .tts_registry import TTS_BACKENDS
@@ -26,13 +28,16 @@ def run_speech_synthesis(
     """Run one authorized synthesis request and retain a complete artifact graph."""
 
     config = config or TTSConfig()
+    policy = enforce_consent_record(request.consent)
     options = dict(config.backend_options)
     options.update(backend_options or {})
     backend = TTS_BACKENDS.choose(request.backend, **options)
     provenance = {
         "target_reference_sha256": sha256_file(request.target_reference),
         "consent_basis": request.consent.basis.value,
+        "consent_record_id": request.consent.record_id,
         "consent_recorded_at": request.consent.recorded_at,
+        "authorization_policy": to_jsonable(policy),
     }
     if request.emotion_reference is not None:
         provenance["emotion_reference_sha256"] = sha256_file(request.emotion_reference)
@@ -78,6 +83,16 @@ def run_speech_synthesis(
             )
             metrics = to_jsonable(report)
             manifest.add_artifact(benchmark_path, role="tts_benchmark", media_type="application/json")
+        disclosure_embedded = False
+        if config.embed_disclosure_marker:
+            embed_wav_disclosure(
+                output,
+                workflow="zero-shot-tts",
+                backend=backend.name,
+                consent_record_id=request.consent.record_id,
+            )
+            disclosure_embedded = True
+            manifest.event("audio_disclosure_embedded", mechanism="RIFF ZYNV")
         if config.provenance_sidecar:
             provenance_path = output.with_suffix(".provenance.json")
             write_tts_provenance(
@@ -86,6 +101,7 @@ def run_speech_synthesis(
                 output_audio=output,
                 backend=backend.name,
                 model_metadata=backend_output.metadata,
+                disclosure_embedded=disclosure_embedded,
             )
             manifest.add_artifact(provenance_path, role="tts_provenance", media_type="application/json")
         manifest.add_artifact(output, role="tts_synthesized_audio", media_type="audio/wav")

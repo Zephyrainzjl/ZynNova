@@ -72,6 +72,18 @@ PUBLIC_OBJECT_SOURCES = (
         "venue": "technical report / open implementation",
         "role": "high-resolution O-Voxel and PBR object generation",
     },
+    {
+        "name": "SPAR3D",
+        "source": "https://github.com/Stability-AI/stable-point-aware-3d",
+        "venue": "CVPR 2025",
+        "role": "visible-surface regression plus generative hidden-surface completion",
+    },
+    {
+        "name": "Stable Fast 3D",
+        "source": "https://github.com/Stability-AI/stable-fast-3d",
+        "venue": "CVPR 2025",
+        "role": "explicit mesh, UV and material-aware single-image reconstruction",
+    },
 )
 
 __all__ = ["OBJECT_BACKENDS", "PUBLIC_OBJECT_SOURCES"]

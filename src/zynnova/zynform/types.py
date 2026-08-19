@@ -41,6 +41,8 @@ class ObjectResult:
     exported_surface_files: tuple[Path, ...]
     exported_volume_files: tuple[Path, ...]
     manifest_path: Path
+    fem_surface_mesh: TriangleMesh | None = None
+    exported_fem_surface_files: tuple[Path, ...] = ()
     metadata: Mapping[str, object] = field(default_factory=dict)
 
 

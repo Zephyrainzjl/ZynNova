@@ -101,3 +101,41 @@ def test_scene_dense_reconstruction_style_export_and_colmap(tmp_path, image_fact
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "completed"
     assert any(event["name"] == "style_applied" for event in manifest["events"])
+
+
+def test_scene_emits_metric_audit_and_large_world_index(tmp_path, image_factory) -> None:
+    if "test-dense-grid" not in RECONSTRUCTION_BACKENDS:
+        RECONSTRUCTION_BACKENDS.register(
+            BackendDescriptor(
+                name="test-dense-grid",
+                task="scene-reconstruction",
+                factory=_DenseGridBackend,
+                summary="deterministic dense scene test backend",
+                default_rank=999,
+            )
+        )
+    image = image_factory(tmp_path / "world_input.png")
+    result = run_scene(
+        SceneRequest(images=(image,), backend="test-dense-grid"),
+        SceneConfig(
+            output_directory=str(tmp_path / "world-runs"),
+            confidence_percentile=0.0,
+            fusion_voxel_size_m=0.001,
+            build_mesh=True,
+            export_formats=("ply",),
+            export_colmap=False,
+            build_world_hierarchy=True,
+            world_chunk_size_m=0.05,
+            world_lod_levels=2,
+        ),
+    )
+    assert result.quality_path is not None and result.quality_path.is_file()
+    quality = json.loads(result.quality_path.read_text(encoding="utf-8"))
+    assert quality["metric_plausible"] is True
+    assert quality["diagonal_m"] > 0.0
+    assert result.world_index_path is not None and result.world_index_path.is_file()
+    index = json.loads(result.world_index_path.read_text(encoding="utf-8"))
+    assert index["schema"] == "zynnova.world-index/1.0"
+    assert index["unit"] == "meter"
+    assert index["levels"] == 2
+    assert index["chunks"]

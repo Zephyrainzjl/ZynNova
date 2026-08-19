@@ -10,6 +10,14 @@ from typing import Mapping
 from ..core import ConfigurationError
 
 
+class PhysicalScaleBasis(str, Enum):
+    UNSPECIFIED = "unspecified"
+    USER_DECLARED = "user-declared"
+    KNOWN_DIMENSION = "known-dimension"
+    CALIBRATION_TARGET = "calibration-target"
+    SENSOR_METADATA = "sensor-metadata"
+
+
 class FEMMethod(str, Enum):
     AUTO = "auto"
     TETGEN = "tetgen"
@@ -26,6 +34,8 @@ class ObjectRequest:
     model_id: str | None = None
     foreground_mask: Path | None = None
     physical_extent_m: float | None = None
+    physical_scale_basis: PhysicalScaleBasis = PhysicalScaleBasis.UNSPECIFIED
+    physical_scale_evidence: Path | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -37,8 +47,32 @@ class ObjectRequest:
             raise FileNotFoundError(mask)
         if self.physical_extent_m is not None and self.physical_extent_m <= 0.0:
             raise ConfigurationError("physical_extent_m must be positive")
+        evidence = (
+            None
+            if self.physical_scale_evidence is None
+            else Path(self.physical_scale_evidence)
+        )
+        if evidence is not None and not evidence.is_file():
+            raise FileNotFoundError(evidence)
+        basis = self.physical_scale_basis
+        if self.physical_extent_m is not None and basis is PhysicalScaleBasis.UNSPECIFIED:
+            basis = PhysicalScaleBasis.USER_DECLARED
+        if (
+            self.physical_extent_m is not None
+            and basis in {
+                PhysicalScaleBasis.KNOWN_DIMENSION,
+                PhysicalScaleBasis.CALIBRATION_TARGET,
+                PhysicalScaleBasis.SENSOR_METADATA,
+            }
+            and evidence is None
+        ):
+            raise ConfigurationError(
+                f"physical scale basis {basis.value!r} requires physical_scale_evidence"
+            )
         object.__setattr__(self, "image", image)
         object.__setattr__(self, "foreground_mask", mask)
+        object.__setattr__(self, "physical_scale_basis", basis)
+        object.__setattr__(self, "physical_scale_evidence", evidence)
         object.__setattr__(self, "metadata", dict(self.metadata))
 
 
@@ -50,6 +84,9 @@ class FEMConfig:
     minimum_dihedral_degrees: float = 8.0
     minimum_radius_edge_ratio: float = 1.4
     maximum_cells: int = 2_000_000
+    optimization_level: int = 2
+    minimum_mean_ratio: float = 0.0
+    prefer_native_tetgen: bool = True
     require_watertight: bool = True
     region_id: int = 1
     region_name: str = "OBJECT"
@@ -63,6 +100,10 @@ class FEMConfig:
             raise ConfigurationError("minimum_radius_edge_ratio must be positive")
         if self.maximum_cells < 1:
             raise ConfigurationError("maximum_cells must be positive")
+        if not 0 <= self.optimization_level <= 10:
+            raise ConfigurationError("optimization_level must lie in [0,10]")
+        if not 0.0 <= self.minimum_mean_ratio <= 1.0:
+            raise ConfigurationError("minimum_mean_ratio must lie in [0,1]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +120,9 @@ class ObjectConfig:
     weld_tolerance: float = 1.0e-7
     generate_fem: bool = True
     fem: FEMConfig = field(default_factory=FEMConfig)
-    fem_export_formats: tuple[str, ...] = ("msh", "vtk", "inp", "npz")
+    fem_export_formats: tuple[str, ...] = ("msh", "vtk", "inp", "npz", "mphtxt")
+    export_fem_repair_surface: bool = True
+    repair_fem_surface: bool = True
     backend_options: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -102,7 +145,7 @@ class ObjectConfig:
         volume_formats = tuple(
             dict.fromkeys(str(item).strip().lower().lstrip(".") for item in self.fem_export_formats)
         )
-        supported_volume = {"vtk", "msh", "inp", "npz"}
+        supported_volume = {"vtk", "msh", "inp", "npz", "mphtxt"}
         unsupported_volume = sorted(set(volume_formats) - supported_volume)
         if unsupported_volume:
             raise ConfigurationError(f"unsupported FEM export formats: {unsupported_volume}")
@@ -113,4 +156,10 @@ class ObjectConfig:
         object.__setattr__(self, "backend_options", dict(self.backend_options))
 
 
-__all__ = ["FEMConfig", "FEMMethod", "ObjectConfig", "ObjectRequest"]
+__all__ = [
+    "FEMConfig",
+    "FEMMethod",
+    "ObjectConfig",
+    "ObjectRequest",
+    "PhysicalScaleBasis",
+]

@@ -1,13 +1,40 @@
-"""Non-invasive provenance sidecars for converted speech."""
+"""Auditable provenance sidecars for converted and synthesized speech."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Mapping
 
 from ..core import sha256_file
 from ..core.serialization import dump_json
 from .schema import VoiceRequest
+
+
+def _finalize(payload: dict[str, object]) -> dict[str, object]:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    payload["record_sha256"] = hashlib.sha256(canonical).hexdigest()
+    return payload
+
+
+def _consent_payload(consent: object) -> dict[str, object]:
+    value = consent
+    evidence = value.evidence  # type: ignore[attr-defined]
+    return {
+        "record_id": value.record_id,  # type: ignore[attr-defined]
+        "confirmed": value.confirmed,  # type: ignore[attr-defined]
+        "basis": value.basis.value,  # type: ignore[attr-defined]
+        "purpose": value.purpose,  # type: ignore[attr-defined]
+        "recorded_at": value.recorded_at,  # type: ignore[attr-defined]
+        "evidence_filename": None if evidence is None else evidence.name,
+        "evidence_sha256": None if evidence is None else sha256_file(evidence),
+    }
 
 
 def write_voice_provenance(
@@ -17,13 +44,14 @@ def write_voice_provenance(
     output_audio: str | Path,
     backend: str,
     model_metadata: Mapping[str, object] | None = None,
+    disclosure_embedded: bool = False,
 ) -> Path:
-    """Write hashes and consent basis without embedding private reference audio."""
+    """Write hashes and authorization evidence without copying private reference audio."""
 
-    evidence = request.consent.evidence
-    payload = {
-        "schema": "zynnova.voice-provenance/1.0",
+    payload: dict[str, object] = {
+        "schema": "zynnova.voice-provenance/2.0",
         "synthetic_or_converted_audio": True,
+        "workflow": "voice-conversion",
         "backend": backend,
         "source": {
             "filename": request.source_audio.name,
@@ -37,23 +65,19 @@ def write_voice_provenance(
             "filename": Path(output_audio).name,
             "sha256": sha256_file(output_audio),
         },
-        "consent": {
-            "confirmed": request.consent.confirmed,
-            "basis": request.consent.basis.value,
-            "purpose": request.consent.purpose,
-            "recorded_at": request.consent.recorded_at,
-            "evidence_sha256": None if evidence is None else sha256_file(evidence),
+        "consent": _consent_payload(request.consent),
+        "media_disclosure": {
+            "embedded_marker": bool(disclosure_embedded),
+            "mechanism": "RIFF ZYNV metadata chunk" if disclosure_embedded else None,
+            "robust_watermark": False,
         },
         "model_metadata": dict(model_metadata or {}),
         "notice": (
-            "This sidecar records provenance; it is not a cryptographic audio "
-            "watermark and must remain associated with the output file."
+            "This record is tamper-evident provenance metadata, not a claim of "
+            "adversarially robust audio watermarking or speaker authorization by itself."
         ),
     }
-    return dump_json(path, payload)
-
-
-__all__ = ["write_tts_provenance", "write_voice_provenance"]
+    return dump_json(path, _finalize(payload))
 
 
 def write_tts_provenance(
@@ -63,17 +87,18 @@ def write_tts_provenance(
     output_audio: str | Path,
     backend: str,
     model_metadata: Mapping[str, object] | None = None,
+    disclosure_embedded: bool = False,
 ) -> Path:
-    """Write consent, hashes, and synthesis controls for a TTS result."""
+    """Write consent, hashes, synthesis controls and disclosure status for TTS."""
 
     from .tts_schema import TTSRequest
 
     if not isinstance(request, TTSRequest):
         raise TypeError("request must be a TTSRequest")
-    evidence = request.consent.evidence
-    payload = {
-        "schema": "zynnova.tts-provenance/1.0",
+    payload: dict[str, object] = {
+        "schema": "zynnova.tts-provenance/2.0",
         "synthetic_or_converted_audio": True,
+        "workflow": "zero-shot-tts",
         "backend": backend,
         "requested_text": request.text,
         "language": request.language,
@@ -99,17 +124,19 @@ def write_tts_provenance(
             "filename": Path(output_audio).name,
             "sha256": sha256_file(output_audio),
         },
-        "consent": {
-            "confirmed": request.consent.confirmed,
-            "basis": request.consent.basis.value,
-            "purpose": request.consent.purpose,
-            "recorded_at": request.consent.recorded_at,
-            "evidence_sha256": None if evidence is None else sha256_file(evidence),
+        "consent": _consent_payload(request.consent),
+        "media_disclosure": {
+            "embedded_marker": bool(disclosure_embedded),
+            "mechanism": "RIFF ZYNV metadata chunk" if disclosure_embedded else None,
+            "robust_watermark": False,
         },
         "model_metadata": dict(model_metadata or {}),
         "notice": (
-            "This sidecar records synthetic-audio provenance; it is not a cryptographic "
-            "watermark and must remain associated with the audio file."
+            "This record is tamper-evident provenance metadata, not a claim of "
+            "adversarially robust audio watermarking or speaker authorization by itself."
         ),
     }
-    return dump_json(path, payload)
+    return dump_json(path, _finalize(payload))
+
+
+__all__ = ["write_tts_provenance", "write_voice_provenance"]

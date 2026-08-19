@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Callable
 
 import numpy as np
 
@@ -60,6 +59,11 @@ def tetrahedralize_surface(
                     f"{method.value} returned invalid Tet4 cells: "
                     f"inverted={quality.inverted_cells}, degenerate={quality.degenerate_cells}"
                 )
+            if quality.minimum_mean_ratio < config.minimum_mean_ratio:
+                raise FEMMeshingError(
+                    f"{method.value} minimum mean-ratio={quality.minimum_mean_ratio:.6g} "
+                    f"is below requested {config.minimum_mean_ratio:.6g}"
+                )
             if volume.n_cells > config.maximum_cells:
                 raise FEMMeshingError(
                     f"{method.value} created {volume.n_cells} cells, above "
@@ -91,15 +95,27 @@ def _method_order(method: FEMMethod) -> tuple[FEMMethod, ...]:
 
 
 def _with_tetgen(mesh: TriangleMesh, config: FEMConfig) -> VolumeMesh:
+    failures: list[str] = []
+    if config.prefer_native_tetgen:
+        try:
+            return _with_zynmorph_native_tetgen(mesh, config)
+        except (ImportError, BackendUnavailableError, GeometryError, RuntimeError, ValueError) as exc:
+            failures.append(f"native-zynmorph: {exc}")
     try:
         import tetgen
     except ImportError as exc:
-        raise BackendUnavailableError("TetGen Python package is not installed") from exc
+        detail = "; ".join(failures)
+        raise BackendUnavailableError(
+            "no TetGen backend is available" + (f"; {detail}" if detail else "")
+        ) from exc
     generator = tetgen.TetGen(mesh.vertices, mesh.faces)
     result = generator.tetrahedralize(
         order=1,
         mindihedral=config.minimum_dihedral_degrees,
         minratio=config.minimum_radius_edge_ratio,
+        maxvolume=_regular_tetra_volume(config.target_edge_length),
+        fixedvolume=True,
+        opt_iterations=max(0, config.optimization_level),
     )
     if isinstance(result, tuple) and len(result) >= 2:
         nodes, tetrahedra = result[0], result[1]
@@ -113,8 +129,71 @@ def _with_tetgen(mesh: TriangleMesh, config: FEMConfig) -> VolumeMesh:
         tetrahedra=np.asarray(tetrahedra),
         cell_regions=np.full(len(tetrahedra), config.region_id, dtype=np.int32),
         region_names={config.region_id: config.region_name},
-        metadata={"backend": "tetgen"},
+        metadata={"backend": "tetgen-python", "native_failures": tuple(failures)},
     )
+
+
+def _with_zynmorph_native_tetgen(mesh: TriangleMesh, config: FEMConfig) -> VolumeMesh:
+    from ..zynmorph.freeform import mesh_closed_surface_tetgen
+    from ..zynmorph.tetgen import TetGenMeshingConfig, tetgen_native_status
+
+    status = tetgen_native_status()
+    if not status.available:
+        raise BackendUnavailableError(status.reason or "ZynMorph native TetGen is unavailable")
+    seed = _interior_seed(mesh, config.target_edge_length)
+    maximum_volume = _regular_tetra_volume(config.target_edge_length)
+    result = mesh_closed_surface_tetgen(
+        mesh,
+        region=config.region_id,
+        region_name=config.region_name,
+        seed_m_xyz=seed,
+        maximum_tetra_volume_m3=maximum_volume,
+        config=TetGenMeshingConfig(
+            radius_edge_ratio=max(1.000001, config.minimum_radius_edge_ratio),
+            minimum_dihedral_degrees=config.minimum_dihedral_degrees,
+            optimization_level=config.optimization_level,
+            global_maximum_tetra_volume_m3=maximum_volume,
+            preserve_boundary_facets=True,
+        ),
+        maximum_tetrahedra=config.maximum_cells,
+    )
+    volume = result.mesh
+    return VolumeMesh(
+        nodes=volume.nodes,
+        tetrahedra=volume.tetrahedra,
+        cell_regions=volume.cell_regions,
+        region_names=volume.region_names,
+        metadata={**volume.metadata, "backend": "zynnova-native-tetgen"},
+    )
+
+
+def _regular_tetra_volume(edge_length: float) -> float:
+    return float(edge_length**3 / (6.0 * math.sqrt(2.0)))
+
+
+def _interior_seed(mesh: TriangleMesh, target_edge: float) -> tuple[float, float, float]:
+    centre = 0.5 * (np.min(mesh.vertices, axis=0) + np.max(mesh.vertices, axis=0))
+    try:
+        import trimesh
+
+        surface = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces, process=False)
+        candidates = [np.asarray(surface.center_mass, dtype=float), centre]
+        for candidate in candidates:
+            try:
+                if bool(surface.contains(candidate.reshape(1, 3))[0]):
+                    return tuple(float(v) for v in candidate)
+            except Exception:
+                pass
+        extent = float(np.max(np.ptp(mesh.vertices, axis=0)))
+        pitch = max(min(float(target_edge), extent / 24.0), extent / 128.0)
+        filled = surface.voxelized(pitch).fill()
+        points = np.asarray(filled.points, dtype=float)
+        if len(points):
+            index = int(np.argmin(np.linalg.norm(points - centre[None, :], axis=1)))
+            return tuple(float(v) for v in points[index])
+    except Exception:
+        pass
+    return tuple(float(v) for v in centre)
 
 
 def _with_gmsh(mesh: TriangleMesh, config: FEMConfig) -> VolumeMesh:

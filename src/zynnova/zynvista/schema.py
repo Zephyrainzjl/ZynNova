@@ -75,6 +75,16 @@ class SceneConfig:
     mesh_edge_factor: float = 3.5
     export_formats: tuple[str, ...] = ("ply", "obj", "glb")
     export_colmap: bool = True
+    video_sample_fps: float = 2.0
+    video_max_frames: int = 96
+    extract_video_for_image_backends: bool = True
+    build_world_hierarchy: bool = True
+    world_chunk_size_m: float = 25.0
+    world_lod_levels: int = 3
+    world_overlap_m: float = 0.25
+    world_up_axis: str = "Y"
+    geometry_lock_during_style: bool = True
+    require_metric_geometry: bool = True
     style_backend: str | None = None
     style_reference: Path | None = None
     style_prompt: str | None = None
@@ -90,6 +100,20 @@ class SceneConfig:
             raise ConfigurationError("maximum_points must be positive")
         if self.mesh_edge_factor <= 0.0:
             raise ConfigurationError("mesh_edge_factor must be positive")
+        if self.video_sample_fps <= 0.0:
+            raise ConfigurationError("video_sample_fps must be positive")
+        if self.video_max_frames < 1:
+            raise ConfigurationError("video_max_frames must be positive")
+        if self.world_chunk_size_m <= 0.0:
+            raise ConfigurationError("world_chunk_size_m must be positive")
+        if self.world_lod_levels < 1:
+            raise ConfigurationError("world_lod_levels must be positive")
+        if self.world_overlap_m < 0.0:
+            raise ConfigurationError("world_overlap_m cannot be negative")
+        up_axis = str(self.world_up_axis).strip().upper()
+        if up_axis not in {"X", "Y", "Z"}:
+            raise ConfigurationError("world_up_axis must be X, Y, or Z")
+        object.__setattr__(self, "world_up_axis", up_axis)
         formats = tuple(
             dict.fromkeys(str(item).strip().lower().lstrip(".") for item in self.export_formats)
         )

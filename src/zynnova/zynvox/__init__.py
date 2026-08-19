@@ -16,7 +16,9 @@ from .benchmark import (
     benchmark_voice,
     compare_benchmarks,
 )
+from .disclosure import embed_wav_disclosure, has_wav_disclosure
 from .pipeline import run_voice_conversion
+from .policy import ConsentPolicyResult, enforce_consent_record
 from .registry import PUBLIC_VOICE_SOURCES, VOICE_BACKENDS
 from .schema import ConsentBasis, ConsentRecord, VoiceConfig, VoiceMode, VoiceRequest
 from .tts_backends import (
@@ -43,6 +45,7 @@ __all__ = [
     "ComparisonThresholds",
     "ConsentBasis",
     "ConsentRecord",
+    "ConsentPolicyResult",
     "CosyVoice3Backend",
     "ExternalTTSBackend",
     "ExternalVoiceBackend",
@@ -72,8 +75,11 @@ __all__ = [
     "VoiceResult",
     "XVCBackend",
     "benchmark_tts",
+    "embed_wav_disclosure",
+    "enforce_consent_record",
     "benchmark_voice",
     "compare_benchmarks",
+    "has_wav_disclosure",
     "launch_meanvc2_realtime",
     "run_speech_synthesis",
     "run_voice_conversion",

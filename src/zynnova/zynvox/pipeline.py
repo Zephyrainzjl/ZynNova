@@ -10,6 +10,8 @@ from ..core import RunManifest, sha256_file
 from ..core.serialization import to_jsonable
 from .audio import peak_normalize, read_audio, resample, write_wav
 from .benchmark import VoiceEvaluator, benchmark_voice
+from .disclosure import embed_wav_disclosure
+from .policy import enforce_consent_record
 from .provenance import write_voice_provenance
 from .registry import VOICE_BACKENDS
 from .schema import VoiceConfig, VoiceMode, VoiceRequest
@@ -28,9 +30,10 @@ def run_voice_conversion(
     if request.mode is VoiceMode.REALTIME:
         raise ValueError(
             "microphone streaming is interactive; use launch_meanvc2_realtime() "
-            "after recording consent"
+            "with an explicit ConsentRecord"
         )
     config = config or VoiceConfig()
+    policy = enforce_consent_record(request.consent)
     options = dict(config.backend_options)
     options.update(backend_options or {})
     backend = VOICE_BACKENDS.choose(request.backend, **options)
@@ -38,7 +41,9 @@ def run_voice_conversion(
         "source_audio_sha256": sha256_file(request.source_audio),
         "target_reference_sha256": sha256_file(request.target_reference),
         "consent_basis": request.consent.basis.value,
+        "consent_record_id": request.consent.record_id,
         "consent_recorded_at": request.consent.recorded_at,
+        "authorization_policy": to_jsonable(policy),
     }
     if request.consent.evidence is not None:
         provenance["consent_evidence_sha256"] = sha256_file(request.consent.evidence)
@@ -89,6 +94,16 @@ def run_voice_conversion(
                 role="voice_benchmark",
                 media_type="application/json",
             )
+        disclosure_embedded = False
+        if config.embed_disclosure_marker:
+            embed_wav_disclosure(
+                output,
+                workflow="voice-conversion",
+                backend=backend.name,
+                consent_record_id=request.consent.record_id,
+            )
+            disclosure_embedded = True
+            manifest.event("audio_disclosure_embedded", mechanism="RIFF ZYNV")
         if config.provenance_sidecar:
             provenance_path = output.with_suffix(".provenance.json")
             write_voice_provenance(
@@ -97,6 +112,7 @@ def run_voice_conversion(
                 output_audio=output,
                 backend=backend.name,
                 model_metadata=backend_output.metadata,
+                disclosure_embedded=disclosure_embedded,
             )
             manifest.add_artifact(
                 provenance_path,

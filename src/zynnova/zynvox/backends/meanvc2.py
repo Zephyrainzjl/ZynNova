@@ -5,9 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ...core import Availability, run_process
+from ...core import Availability, dump_json, run_process, sha256_file
 from ...core.backend import executable_availability
-from ..schema import VoiceConfig, VoiceMode, VoiceRequest
+from ..policy import enforce_consent_record
+from ..schema import ConsentRecord, VoiceConfig, VoiceMode, VoiceRequest
 from ..types import VoiceBackendOutput
 from .base import VoiceBackend
 
@@ -105,30 +106,68 @@ class MeanVC2Backend(VoiceBackend):
 
 
 def launch_meanvc2_realtime(
-    repository: str | Path | None = None,
+    repository: str | Path,
     *,
+    consent: ConsentRecord,
+    target_reference: str | Path,
     python_executable: str = sys.executable,
     model: str = "40ms",
     input_audio: str | Path | None = None,
     output_audio: str | Path | None = None,
+    audit_directory: str | Path = "zynnova_runs/zynvox_realtime",
     timeout_s: float | None = None,
 ) -> object:
-    """Invoke the official runtime entry point in file or microphone mode.
+    """Invoke MeanVC2 runtime only after binding the run to authorization evidence.
 
-    For microphone mode the process remains attached to the current terminal. The
-    caller must ensure target-speaker authorization before invoking this function.
+    ``target_reference`` is intentionally required even though the upstream realtime
+    application may manage its own reference internally: the ZynVox audit boundary
+    must bind every interactive launch to the voice authorization the user asserts.
     """
 
+    policy = enforce_consent_record(consent)
+    target = Path(target_reference).expanduser().resolve()
+    if not target.is_file():
+        raise FileNotFoundError(target)
     root = Path(repository).expanduser().resolve()
     script = root / "runtime" / "run_rt.py"
     if not script.is_file():
         raise FileNotFoundError(script)
     if model not in {"40ms", "120ms"}:
         raise ValueError("model must be '40ms' or '120ms'")
+    audit_root = Path(audit_directory).expanduser().resolve()
+    audit_root.mkdir(parents=True, exist_ok=True)
+    receipt = audit_root / f"meanvc2_{consent.record_id}.authorization.json"
+    dump_json(
+        receipt,
+        {
+            "schema": "zynnova.realtime-authorization/1.0",
+            "backend": "meanvc2",
+            "consent": {
+                "record_id": consent.record_id,
+                "basis": consent.basis.value,
+                "purpose": consent.purpose,
+                "recorded_at": consent.recorded_at,
+                "evidence_sha256": None
+                if consent.evidence is None
+                else sha256_file(consent.evidence),
+            },
+            "target_reference_sha256": sha256_file(target),
+            "policy": {
+                "authorized": policy.authorized,
+                "evidence_required": policy.evidence_required,
+                "evidence_present": policy.evidence_present,
+            },
+            "mode": "realtime" if input_audio is None else "file",
+            "model": model,
+        },
+    )
     argv = [python_executable, str(script)]
     if input_audio is None:
         argv.extend(["--mode", "realtime", "--model", model])
     else:
+        source = Path(input_audio).expanduser().resolve()
+        if not source.is_file():
+            raise FileNotFoundError(source)
         if output_audio is None:
             raise ValueError("output_audio is required in file mode")
         argv.extend(
@@ -136,9 +175,9 @@ def launch_meanvc2_realtime(
                 "--mode",
                 "file",
                 "--input",
-                str(Path(input_audio).resolve()),
+                str(source),
                 "--output",
-                str(Path(output_audio).resolve()),
+                str(Path(output_audio).expanduser().resolve()),
                 "--model",
                 model,
             ]
