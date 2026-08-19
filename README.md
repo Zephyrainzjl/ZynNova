@@ -1,165 +1,192 @@
-# ZynNova 0.3.0
+<a id="top"></a>
 
-**ZynNova** is an extensible Python/C++ framework for materials intelligence, scientific simulation, microstructure/FEM workflows, modern 3D reconstruction and generation, consent-aware speech, and tool-using large-language-model agents.
+<h1 align="center">ZynNova</h1>
 
-Version 0.3.0 keeps the existing scientific stack intact and adds three large capabilities without forcing heavyweight models into the Python package:
+<p align="center">
+  <img src="docs/assets/zynnova-overview.png" alt="ZynNova framework overview" width="900">
+</p>
 
-1. **ZynAstra** — a complete provider-neutral LLM/agent framework under `src/zynnova/llm/zynastra/`.
-2. **ZynVox Studio** — a first-party voice API and local training/inference orchestration layer designed for GPT-SoVITS-class workflows.
-3. **ZynVista / ZynForm Studio** — stable contracts for fast-moving world and object generators, while retaining ZynNova's metric geometry, repair, DCC export, and FEM stack.
-
-> Heavy checkpoints and external model repositories are intentionally stored in a user-selected workspace outside the installed package. ZynNova contains APIs, orchestration, contracts, quality gates, provenance, and adapters—not multi-gigabyte model weights.
+<p align="center">
+  <a href="#zh-cn"><kbd><strong> 中文 </strong></kbd></a>
+  &nbsp;&nbsp;
+  <a href="#en"><kbd><strong> English </strong></kbd></a>
+</p>
 
 ---
 
-## 1. Package architecture
+<a id="zh-cn"></a>
+
+# 中文文档
+
+<p align="right"><a href="#en"><kbd>切换到 English</kbd></a></p>
+
+## ZynNova 是什么？
+
+**ZynNova** 是一个面向科学智能、材料计算、多尺度仿真、三维重建与生成、语音智能以及大模型 Agent 的可扩展 Python/C++ 框架。
+
+当前主干将多个原本容易彼此割裂的能力统一在同一个包中：
+
+- **ZynMorph**：复杂多相微结构、体素、表面网格、四面体有限元网格与工程格式导出；
+- **ZynSim**：面向材料、电化学、电池与多物理场问题的数值模拟工作流；
+- **ZynVista**：图像/视频条件下的度量场景重建、大世界生成、3DGS/mesh 保持、风格与 DCC 导出；
+- **ZynForm**：图像到高保真三维物体、表面修复、物理尺度恢复、多格式导出与 FEM 网格；
+- **ZynVox**：带同意记录的语音克隆、TTS、语音转换、数据集处理、训练编排、流式 API 与可选 UI；
+- **ZynAstra**：位于 `src/zynnova/llm/zynastra/` 的首个完整 LLM/Agent 框架，可调用 ZynNova 的其他公共能力，并支持云端 API、本地模型、Skills、MCP、Tools、Memory 与 LoRA/QLoRA 微调。
+
+ZynNova 的设计目标不是把所有大型模型权重塞进 Python 包，而是提供稳定的 **API、运行时、协议、质量门、资产管理、工作区管理与外部引擎适配层**。大型语音、LLM、3D/世界生成模型及其 checkpoint 均应下载到用户指定的 **包外工作区**。
+
+> [!IMPORTANT]
+> ZynNova 代码仓库应保持可维护和可安装。数 GB 到数百 GB 的模型仓库、训练集和 checkpoint 不应直接提交到 `src/zynnova/`。
+
+---
+
+## 1. 总体架构
 
 ```text
-src/zynnova/
-├── core/                 shared manifests, exceptions, backend contracts, serialization
-├── data/                 materials/scientific datasets
-├── dynamics/             atomistic/dynamics workflows
-├── geometry/             common point-cloud, surface, camera and volume-mesh geometry
-├── llm/
-│   └── zynastra/         first complete independent LLM/agent framework
-│       ├── providers/    OpenAI-compatible, LiteLLM, local Transformers
-│       ├── tools/        typed tool registry + whole-ZynNova bridge
-│       ├── skills/       portable SKILL.md packages
-│       ├── mcp/          Model Context Protocol client bridge
-│       ├── memory.py     persistent SQLite sessions
-│       ├── models.py     external-workspace model download
-│       ├── finetune.py   LoRA / QLoRA SFT
-│       ├── runtime.py    multi-step tool-using agent loop
-│       ├── server.py     optional FastAPI service
-│       └── cli.py        command-line interface
-├── ml/                   machine-learning models and potentials
-├── structure/            crystal/molecule/polymer representations and conversions
-├── tools/                common utilities
-├── visualization/        reusable scientific visualization
-├── zynmorph/             microstructure generation, voxel/surface/volume conversion, TetGen
-├── zynsim/               multiphysics / FEM / battery-scale simulation
-├── zynvista/             metric scene reconstruction, world generation, 3DGS/mesh, DCC export
-│   ├── external.py       external world-generator contract
-│   ├── model_hub.py      external model workspace helper
-│   └── studio.py         high-level SceneStudio
-├── zynform/              image/object generation, repair, physical scaling, FEM meshing
-│   ├── external.py       external object-generator contract
-│   ├── model_hub.py      external model workspace helper
-│   └── studio.py         high-level ObjectStudio
-└── zynvox/               consent-aware voice conversion and TTS
-    └── studio/            first-party dataset/training/inference/API/UI layer
+ZynNova/
+├── src/zynnova/
+│   ├── core/                 # 公共数据结构、异常、序列化、后端协议
+│   ├── data/                 # 科学与材料数据
+│   ├── dynamics/             # 动力学工作流
+│   ├── geometry/             # 公共几何、点云、表面、相机、体网格
+│   ├── llm/
+│   │   └── zynastra/         # 第一个完整、独立的 LLM / Agent 框架
+│   │       ├── providers/    # OpenAI-compatible / LiteLLM / 本地 Transformers
+│   │       ├── tools/        # Tool registry + ZynNova API bridge
+│   │       ├── skills/       # 可移植 SKILL.md 技能
+│   │       ├── mcp/          # MCP stdio / Streamable HTTP
+│   │       ├── memory.py     # SQLite 会话记忆
+│   │       ├── models.py     # 包外模型下载与登记
+│   │       ├── finetune.py   # LoRA / QLoRA SFT
+│   │       ├── runtime.py    # 多步 Agent runtime
+│   │       ├── server.py     # 可选 FastAPI 服务
+│   │       └── cli.py        # CLI
+│   ├── ml/                   # 机器学习模型与势能模型
+│   ├── structure/            # 晶体、分子、高分子等结构表示
+│   ├── tools/                # 通用工具
+│   ├── visualization/        # 科学可视化
+│   ├── zynmorph/             # 微结构、体素、表面、TetGen/FEM
+│   ├── zynsim/               # 多物理场/FEM/电池模拟
+│   ├── zynvista/             # 场景重建、世界生成、3DGS/mesh、DCC
+│   │   ├── external.py       # 外部场景模型统一协议
+│   │   ├── model_hub.py      # 外部模型工作区
+│   │   └── studio.py         # SceneStudio
+│   ├── zynform/              # 物体生成、修复、尺度与 FEM
+│   │   ├── external.py       # 外部物体模型统一协议
+│   │   ├── model_hub.py      # 外部模型工作区
+│   │   └── studio.py         # ObjectStudio
+│   └── zynvox/
+│       └── studio/            # 数据、训练、推理、API、UI、外部语音引擎
+├── tests/
+├── pyproject.toml
+└── README.md
 ```
 
-Every future LLM framework should live beside ZynAstra:
+未来新增第二套、第三套 LLM 框架时，推荐保持：
 
 ```text
 src/zynnova/llm/
-├── zynastra/       complete framework #1
-├── <future-2>/     complete framework #2
-└── <future-3>/     complete framework #3
+├── zynastra/       # 完整框架 1
+├── <framework-2>/  # 完整框架 2
+└── <framework-3>/  # 完整框架 3
 ```
 
-A future framework does not need to inherit ZynAstra's mutable global state or provider registry. This is intentional: each framework can evolve independently and coexist in one ZynNova installation.
+每个目录都应该是可以独立演进的完整框架，而不是把所有 Agent 的状态、provider registry 或训练逻辑堆进一个全局对象。
 
 ---
 
-## 2. Installation
+## 2. 安装
 
-### Lightweight core
+### 2.1 基础安装
 
 ```bash
 git clone https://github.com/Zephyrainzjl/ZynNova.git
 cd ZynNova
-pip install -e .
+python -m pip install -e .
 ```
 
-### Scientific / existing subsystems
-
-Use the existing extras as before, for example:
+### 2.2 常用科学模块
 
 ```bash
-pip install -e ".[zynmorph-all]"
-pip install -e ".[zynsim-all]"
-pip install -e ".[zynnova-scene]"
-pip install -e ".[zynnova-object]"
-pip install -e ".[zynnova-voice]"
+python -m pip install -e ".[zynmorph-all]"
+python -m pip install -e ".[zynsim-all]"
+python -m pip install -e ".[zynnova-scene]"
+python -m pip install -e ".[zynnova-object]"
+python -m pip install -e ".[zynnova-voice]"
 ```
 
-### ZynAstra LLM
+### 2.3 ZynVox Studio
 
-Hosted OpenAI-compatible endpoints only:
+基础 Studio、HTTP API 与音频处理：
 
 ```bash
-pip install -e ".[llm]"
+python -m pip install -e ".[voice-studio]"
 ```
 
-Broad provider coverage with LiteLLM:
+增加自动 ASR 标注：
 
 ```bash
-pip install -e ".[llm-providers]"
+python -m pip install -e ".[voice-studio-asr]"
 ```
 
-MCP:
+增加 Gradio UI：
 
 ```bash
-pip install -e ".[llm-mcp]"
+python -m pip install -e ".[voice-ui]"
 ```
 
-FastAPI server:
+### 2.4 ZynAstra
+
+云端 OpenAI-compatible Provider：
 
 ```bash
-pip install -e ".[llm-server]"
+python -m pip install -e ".[llm]"
 ```
 
-Local Hugging Face models + LoRA training:
+更广泛的 Provider 路由：
 
 ```bash
-pip install -e ".[llm-local]"
+python -m pip install -e ".[llm-providers]"
 ```
 
-Linux QLoRA environment:
+MCP：
 
 ```bash
-pip install -e ".[llm-local-qlora]"
+python -m pip install -e ".[llm-mcp]"
 ```
 
-Combined ZynAstra feature set:
+本地 Hugging Face 模型与 LoRA：
 
 ```bash
-pip install -e ".[llm-all]"
+python -m pip install -e ".[llm-local]"
 ```
 
-### ZynVox Studio
+Linux / CUDA 下的 QLoRA 环境：
 
 ```bash
-pip install -e ".[voice-studio]"
+python -m pip install -e ".[llm-local-qlora]"
 ```
 
-Add automatic ASR labeling:
+ZynAstra 全功能：
 
 ```bash
-pip install -e ".[voice-studio-asr]"
+python -m pip install -e ".[llm-all]"
 ```
 
-Add Gradio UI:
+### 2.5 场景和三维对象外部模型辅助依赖
 
 ```bash
-pip install -e ".[voice-ui]"
+python -m pip install -e ".[scene-models,object-models]"
 ```
 
-### External 3D model download helpers
-
-```bash
-pip install -e ".[scene-models,object-models]"
-```
-
-`all` deliberately remains a scientific convenience extra rather than silently pulling every LLM, speech-ASR, UI, and generative-model dependency into every installation.
+> [!NOTE]
+> 基础安装不会强制拉取 Transformers、Faster-Whisper、Gradio、训练框架或大型 3D 生成模型。需要哪一组能力再安装对应 extra。
 
 ---
 
-## 3. External workspaces
+## 3. 包外工作区
 
-Set one common root:
+推荐统一指定：
 
 ```bash
 # Linux / WSL
@@ -169,21 +196,22 @@ export ZYNNOVA_WORKSPACE=/data/zynnova_workspace
 $env:ZYNNOVA_WORKSPACE = "D:\\zynnova_workspace"
 ```
 
-The new systems create their own children under that root:
+推荐目录布局：
 
 ```text
 /data/zynnova_workspace/
-├── models/               ZynAstra model snapshots
-├── finetunes/            LoRA/QLoRA adapters
-├── runs/                 agent runs
-├── skills/               user-installed skills
-├── memory/               agent session database
+├── models/                 # ZynAstra 本地模型快照
+├── finetunes/              # LoRA / QLoRA adapter
+├── runs/                   # Agent 运行记录
+├── skills/                 # 用户 Skills
+├── memory/                 # Agent 会话数据库
 ├── zynvox/
 │   ├── datasets/
 │   ├── models/
 │   ├── engines/
 │   ├── voices/
-│   └── runs/
+│   ├── runs/
+│   └── cache/
 ├── zynvista/
 │   ├── models/
 │   └── runs/
@@ -192,409 +220,262 @@ The new systems create their own children under that root:
     └── runs/
 ```
 
-You can instead set subsystem-specific roots with `ZYNNOVA_VOICE_WORKSPACE`, `ZYNNOVA_SCENE_WORKSPACE`, or `ZYNNOVA_OBJECT_WORKSPACE`.
+语音模块也可以单独指定：
+
+```bash
+export ZYNNOVA_VOICE_WORKSPACE=/data/voice_workspace
+```
+
+场景和对象模块可以分别设置自己的工作区，避免大模型互相污染。
 
 ---
 
-# 4. ZynAstra — complete LLM / Agent framework
+## 4. ZynMorph —— 微结构与有限元网格
 
-ZynAstra is the first self-contained framework under `zynnova.llm`. It is not tied to one provider.
+ZynMorph 面向复杂多相材料和电极微结构，负责从参数化几何、体素或外部几何到可计算网格的转换。
 
-Core capabilities:
+典型能力包括：
 
-- OpenAI Responses API path for OpenAI endpoints.
-- Generic OpenAI-compatible Chat Completions path for SiliconFlow, ModelScope, vLLM, LM Studio, compatible gateways, and private endpoints.
-- Optional LiteLLM provider for broad provider routing.
-- Local `transformers` inference from a model directory in the external workspace.
-- Multi-step function/tool calling.
-- Provider-native Responses tools when a provider supports them.
-- Structured-output / JSON-schema configuration hooks.
-- Multimodal message blocks through the provider-neutral `Message` representation.
-- Parallel independent sessions with `Agent.run_many(...)`.
-- Automatic JSON → Python `dataclass`, `Enum`, `Path`, list/tuple/dict conversion when calling public ZynNova APIs.
-- Persistent session memory with SQLite.
-- Portable `SKILL.md` skills.
-- MCP stdio and Streamable HTTP clients through the official Python MCP SDK when installed.
-- Local Hugging Face snapshot download into a chosen workspace.
-- LoRA / QLoRA supervised fine-tuning into a chosen workspace.
-- Optional FastAPI service.
-- CLI.
-- No API keys are written to workspace metadata; keys are read from environment variables.
+- 多相体素结构；
+- 正极/负极颗粒、电解液、隔膜等区域；
+- 不规则表面提取与平滑；
+- 复杂连通拓扑；
+- 表面质量修复；
+- TetGen 四面体体网格；
+- 区域/边界标签保留；
+- VTK、MSH、INP、COMSOL `mphtxt` 等工程导出；
+- 与 ZynSim 的 FEM/多物理场求解衔接。
 
-## 4.1 OpenAI
-
-```python
-import asyncio
-from zynnova.llm.zynastra import Agent, AgentConfig, ProviderConfig, Workspace
-
-async def main():
-    provider = ProviderConfig.openai(
-        model="gpt-5.6",
-        reasoning_effort="high",
-        # Optional OpenAI Responses-native tools stay provider-specific:
-        # native_tools=({"type": "web_search"},),
-    )
-
-    agent = Agent.create(
-        provider,
-        Workspace("/data/zynnova_workspace"),
-        config=AgentConfig(max_steps=20),
-    )
-
-    try:
-        result = await agent.run(
-            "Inspect the available ZynNova scene APIs and tell me how to reconstruct a video."
-        )
-        print(result.text)
-        print(result.session_id)
-    finally:
-        await agent.aclose()
-
-asyncio.run(main())
-```
-
-Set:
-
-```bash
-export OPENAI_API_KEY=...
-```
-
-## 4.2 SiliconFlow
-
-```python
-provider = ProviderConfig.siliconflow(
-    model="<your-siliconflow-model-id>",
-)
-agent = Agent.create(provider, "/data/zynnova_workspace")
-```
-
-```bash
-export SILICONFLOW_API_KEY=...
-```
-
-## 4.3 ModelScope inference API
-
-```python
-provider = ProviderConfig.modelscope(
-    model="<your-modelscope-model-id>",
-)
-```
-
-```bash
-export MODELSCOPE_API_KEY=...
-```
-
-## 4.4 Any OpenAI-compatible endpoint
-
-```python
-from zynnova.llm.zynastra import ProviderConfig
-
-provider = ProviderConfig(
-    kind="openai-compatible",
-    model="my-model",
-    base_url="http://127.0.0.1:8000/v1",
-    api_key_env="MY_API_KEY",
-    api_style="chat-completions",
-)
-```
-
-This is the preferred path for vLLM, private gateways, self-hosted OpenAI-compatible servers, and vendors that expose compatible endpoints.
-
-## 4.5 LiteLLM
-
-```python
-provider = ProviderConfig(
-    kind="litellm",
-    model="<litellm-provider>/<model>",
-    base_url="litellm://",
-    api_key_env="MY_PROVIDER_KEY",
-)
-```
-
-Provider-specific model strings and credentials remain the responsibility of the provider configuration; ZynAstra does not hard-code every vendor into the core runtime.
-
-For ensemble/delegated workloads, independent sessions can run concurrently:
-
-```python
-results = await agent.run_many(
-    ["analyze route A", "analyze route B", "audit the assumptions"],
-    max_concurrency=3,
-)
-```
+ZynMorph 的原则是：**几何标签、区域标签和物理区域必须在体素 → 表面 → 四面体 → 导出的全过程中可追踪。**
 
 ---
 
-## 4.6 Calling all public ZynNova functions
+## 5. ZynSim —— 多尺度与多物理场模拟
 
-Every ZynAstra instance can install two generic scientific tools:
+ZynSim 是数值求解与工作流层，可用于组织：
 
-- `zynnova_list_api` — inspect callable APIs in a namespace.
-- `zynnova_call` — invoke a public function beneath an allowlisted ZynNova subsystem.
+- FEM；
+- 电化学；
+- 传热；
+- 传质；
+- 多孔介质；
+- 电池电极/隔膜结构；
+- 相场与相关多物理场流程；
+- 网格、材料区域、边界条件和结果导出。
 
-Example agent intent:
+ZynSim 与 ZynMorph 分工明确：ZynMorph 负责“结构怎样变成高质量计算网格”，ZynSim 负责“在这些网格/区域上如何定义并求解物理问题”。
+
+---
+
+## 6. ZynVista —— 场景重建与大世界生成
+
+ZynVista 面向图像/视频条件下的三维场景任务。
+
+核心目标：
+
+- 图像条件场景恢复；
+- 视频条件场景重建；
+- 度量尺度和相机信息管理；
+- 大场景/世界生成；
+- 3D Gaussian Splatting 资产；
+- mesh 保持与质量检查；
+- 深度、法线、相机、材质等辅助资产；
+- 风格转换后的几何资产保持；
+- Blender、Maya、Houdini 等 DCC 使用的通用导出链。
+
+### 6.1 外部模型协议
+
+快速发展的世界模型不应写死在 ZynVista 主干。`external.py` 和 `SceneStudio` 负责稳定协议：
 
 ```text
-1. list zynnova.zynvista
-2. construct SceneRequest and SceneConfig from JSON
-3. call zynnova.zynvista.run_scene
-4. inspect the returned run directory / manifest
-5. summarize the result
+输入
+  ↓
+ZynVista SceneRequest
+  ↓
+外部生成/重建引擎
+  ↓
+mesh / PBR / 3DGS / cameras / depth / normals / metadata
+  ↓
+ZynVista 质量检查、尺度、资产整理、导出
 ```
 
-The tool bridge performs best-effort conversion from JSON objects to annotated Python dataclasses and enums. It rejects private attributes and namespaces outside the configured allowlist.
+模型仓库和 checkpoint 位于包外工作区，因此可以随时替换底层模型而不破坏 ZynNova 上层 API。
 
-You can restrict tool access:
+---
+
+## 7. ZynForm —— 高保真图像到三维物体
+
+ZynForm 聚焦单体物品与工程几何：
+
+- image-to-3D；
+- multi-view-to-3D；
+- mesh/PBR 资产；
+- 缺陷/孔洞/非流形表面修复；
+- 物理尺度恢复；
+- 重采样与拓扑质量控制；
+- OBJ / PLY / STL / GLB 等多格式导出；
+- 四面体 FEM 网格；
+- 与 ZynMorph/ZynSim 的工程计算链连接。
+
+外部生成模型通过 `ObjectStudio` 统一接入，后处理和工程导出仍由 ZynNova 控制。
+
+---
+
+## 8. ZynVox —— 语音智能框架
+
+ZynVox 由两层组成：
+
+1. 原有语音核心能力；
+2. 新增的 **ZynVox Studio**，负责数据、训练、推理、API、UI、外部引擎和工作区。
+
+ZynVox Studio 的目标是让上层调用保持 ZynNova 风格，而不是要求业务代码直接依赖某一个第三方 WebUI。
+
+### 8.1 主要能力
+
+- 同意记录与 voice profile；
+- few-shot / zero-shot TTS 工作流；
+- 语音转换；
+- 数据切片；
+- Faster-Whisper 可选自动标注；
+- 外部训练阶段编排；
+- 外部声学引擎注册；
+- GPT-SoVITS 本地服务适配；
+- 流式 HTTP 输出；
+- FastAPI；
+- Gradio 可选 UI；
+- 模型/数据/运行产物全部进入包外 workspace。
+
+> [!CAUTION]
+> 克隆或转换真实人物声音前，请确认你有相应授权。ZynVox 提供同意记录结构，但技术上的“可执行”不等于你已经获得使用许可。
+
+### 8.2 创建 Studio
 
 ```python
-from zynnova.llm.zynastra import AgentConfig
+from zynnova.zynvox import VoiceWorkspace, ZynVoxStudio
 
-config = AgentConfig(
-    allowed_zynnova_roots=("zynvista", "zynform", "zynmorph"),
-)
+workspace = VoiceWorkspace("/data/zynnova_workspace")
+studio = ZynVoxStudio(workspace=workspace)
 ```
 
----
-
-## 4.7 Skills
-
-A skill is a directory containing `SKILL.md` and optional `manifest.json`:
-
-```text
-/data/zynnova_workspace/skills/electrode-meshing/
-├── SKILL.md
-└── manifest.json
-```
-
-Example `manifest.json`:
-
-```json
-{
-  "name": "electrode-meshing",
-  "version": "1.0"
-}
-```
-
-The skill instructions are discovered by `SkillManager` and incorporated into the agent system context. This format is deliberately file-based, inspectable, and easy to version-control outside the package.
-
----
-
-## 4.8 MCP
-
-```python
-from zynnova.llm.zynastra import AgentConfig, MCPServerConfig
-
-config = AgentConfig(
-    mcp_servers=(
-        MCPServerConfig(
-            name="my_server",
-            transport="stdio",
-            command="python",
-            args=("/data/mcp/my_server.py",),
-        ),
-    )
-)
-```
-
-Streamable HTTP:
-
-```python
-MCPServerConfig(
-    name="remote_tools",
-    transport="streamable-http",
-    url="https://example.internal/mcp",
-)
-```
-
-MCP tool names are namespaced as `mcp__<server>__<tool>` to prevent collisions with ZynNova-native tools and other MCP servers.
-
----
-
-## 4.9 Download a model outside the package
-
-```python
-from zynnova.llm.zynastra import Workspace, download_model
-
-workspace = Workspace("/data/zynnova_workspace").ensure()
-local = download_model(
-    "<hugging-face-model-id>",
-    workspace,
-)
-print(local.path)
-```
-
-CLI:
-
-```bash
-zynnova-llm --workspace /data/zynnova_workspace \
-  download-model <hugging-face-model-id>
-```
-
-The implementation uses Hugging Face snapshot download with `local_dir=...`; the resulting snapshot is under the external workspace, not `site-packages/zynnova` and not your git repository.
-
----
-
-## 4.10 Local inference
-
-```python
-from zynnova.llm.zynastra import Agent, ProviderConfig
-
-provider = ProviderConfig.local(
-    "/data/zynnova_workspace/models/my-local-model"
-)
-agent = Agent.create(provider, "/data/zynnova_workspace")
-```
-
-The local provider uses `AutoTokenizer` + `AutoModelForCausalLM` and `device_map="auto"`.
-
----
-
-## 4.11 LoRA / QLoRA fine-tuning
-
-Input data can be a Hugging Face dataset name or local JSON/JSONL/CSV.
-
-```python
-from zynnova.llm.zynastra import SFTConfig, Workspace, finetune_lora
-
-adapter = finetune_lora(
-    "/data/zynnova_workspace/models/base-model",
-    SFTConfig(
-        dataset="/data/my_task/train.jsonl",
-        text_field="text",
-        output_name="battery-agent",
-        epochs=2,
-        learning_rate=1e-4,
-        lora_r=32,
-        lora_alpha=64,
-        qlora_4bit=True,
-    ),
-    Workspace("/data/zynnova_workspace"),
-)
-print(adapter)
-```
-
-All checkpoints and final adapters are written below `workspace/finetunes`.
-
----
-
-## 4.12 ZynAstra API server
-
-```bash
-zynnova-llm \
-  --workspace /data/zynnova_workspace \
-  serve \
-  --provider openai-compatible \
-  --model gpt-5.6 \
-  --base-url https://api.openai.com/v1 \
-  --api-key-env OPENAI_API_KEY \
-  --api-style responses \
-  --host 127.0.0.1 \
-  --port 8765
-```
-
-Endpoints:
-
-```text
-GET  /v1/health
-GET  /v1/tools
-POST /v1/agent/run
-```
-
----
-
-# 5. ZynVox Studio — GPT-SoVITS-class workflow surface with ZynNova's own API
-
-The previous ZynVox APIs remain available:
-
-- consent-gated voice conversion,
-- zero/few-shot TTS backends,
-- GPT-SoVITS API adapter,
-- CosyVoice / IndexTTS adapters,
-- benchmarking,
-- provenance and disclosure markers.
-
-0.3.0 adds a first-party **ZynVox Studio** above those backends.
-
-The Studio API covers the workflow surface expected from a GPT-SoVITS-class system:
-
-- reference-voice enrollment,
-- few/zero-shot reference-conditioned TTS,
-- voice conversion,
-- language and reference transcript conditioning,
-- seed / top-k / top-p / temperature / repetition penalty,
-- speed control,
-- batching and parallel-inference hints,
-- streaming transport,
-- long-text split-mode hints,
-- dataset slicing and normalization,
-- optional Faster-Whisper transcription,
-- staged local training orchestration,
-- external model/checkpoint registry,
-- Python API,
-- REST API,
-- optional Gradio UI,
-- existing ZynVox consent / provenance boundary.
-
-**Important quality boundary:** ZynVox Studio supplies the complete first-party workflow and API contract, but speech quality is determined by the selected acoustic/semantic engine and checkpoints. ZynNova does not pretend that a wrapper by itself recreates a neural architecture. To reach GPT-SoVITS-level acoustic quality, attach a compatible local engine/checkpoint through `CommandVoiceEngine` or use one of the existing mature ZynVox backends.
-
-## 5.1 Enroll an authorized voice
+### 8.3 注册一个声音
 
 ```python
 from zynnova.zynvox import ConsentBasis, ConsentRecord
-from zynnova.zynvox.studio import ZynVoxStudio
-
-studio = ZynVoxStudio("/data/zynnova_workspace")
 
 consent = ConsentRecord(
     confirmed=True,
     basis=ConsentBasis.SELF,
-    purpose="my local TTS model",
+    purpose="personal voice model",
 )
 
-studio.enroll_voice(
-    "my_voice",
-    "/data/voice/reference.wav",
-    consent,
-    reference_text="This is the transcript of the reference clip.",
+profile = studio.enroll_voice(
+    voice_id="my_voice",
+    reference_audio="/data/reference.wav",
+    reference_text="这是一段参考语音。",
     language="zh",
+    consent=consent,
 )
 ```
 
-For non-self voices, the existing ZynVox policy requires concrete authorization/license/source evidence.
-
-## 5.2 Synthesize
+### 8.4 TTS
 
 ```python
-from zynnova.zynvox.studio import GenerationRequest
+from zynnova.zynvox import GenerationRequest
 
 result = studio.synthesize(
     GenerationRequest(
-        text="你好，这是 ZynVox Studio。",
+        text="欢迎使用 ZynNova。",
         voice_id="my_voice",
         language="zh",
+        output_name="hello",
         top_k=15,
         top_p=1.0,
         temperature=1.0,
         speed=1.0,
-        seed=1234,
+        repetition_penalty=1.35,
+        batch_size=1,
+        streaming=False,
+        parallel_infer=True,
     )
 )
+
 print(result.audio)
 ```
 
-By default the Studio uses the legacy ZynVox adapter so existing configured backends continue to work.
+### 8.5 语音转换
 
----
-
-## 5.3 Managed local GPT-SoVITS engine
-
-For an external GPT-SoVITS checkout, ZynNova can own the process lifecycle and translate `GenerationRequest` directly to the current local `api_v2.py` `/tts` contract. Your application still talks only to the ZynVox Studio API.
+当当前 engine 支持 VC 时：
 
 ```python
-from zynnova.zynvox.studio import (
-    GPTSoVITSLocalConfig,
-    GPTSoVITSLocalEngine,
-    ZynVoxStudio,
+result = studio.voice_convert(
+    source_audio="/data/source.wav",
+    voice_id="my_voice",
+    output_name="converted",
 )
+
+print(result.audio)
+```
+
+### 8.6 数据集切片
+
+```python
+from zynnova.zynvox import DatasetPrepareConfig, prepare_dataset
+
+manifest = prepare_dataset(
+    DatasetPrepareConfig(
+        dataset_name="speaker_a",
+        input_audio="/data/raw_recording.wav",
+        language="zh",
+        min_segment_s=1.0,
+        max_segment_s=15.0,
+        transcribe=True,
+        whisper_model="large-v3",
+        whisper_device="auto",
+    ),
+    workspace=workspace,
+)
+
+print(manifest)
+```
+
+不需要 ASR 时可设置 `transcribe=False`。
+
+### 8.7 训练编排
+
+ZynVox Studio 不把第三方训练仓库复制进包内，而是将训练阶段委托给外部 engine/driver：
+
+```python
+from zynnova.zynvox import TrainingConfig, VoiceEngineProfile, train_voice_model
+
+engine_profile = VoiceEngineProfile(
+    name="my-speech-engine",
+    root="/data/external_voice_engine",
+    python="python",
+)
+
+config = TrainingConfig(
+    dataset_manifest=manifest,
+    run_name="speaker_a_v1",
+    stages=("prepare-text", "ssl-features", "semantic", "acoustic"),
+    batch_size=4,
+    epochs_semantic=15,
+    epochs_acoustic=8,
+    precision="bf16",
+    device="cuda",
+)
+
+result = train_voice_model(config, engine_profile, workspace)
+print(result)
+```
+
+通过 `stage_commands` 可以为每一个训练阶段指定第三方仓库自己的命令。
+
+### 8.8 GPT-SoVITS 本地引擎适配
+
+当 GPT-SoVITS 仓库已经位于包外目录时：
+
+```python
+from zynnova.zynvox import GPTSoVITSLocalConfig, GPTSoVITSLocalEngine
 
 engine = GPTSoVITSLocalEngine(
     GPTSoVITSLocalConfig(
@@ -602,139 +483,48 @@ engine = GPTSoVITSLocalEngine(
         python="/data/envs/gpt-sovits/bin/python",
         host="127.0.0.1",
         port=9880,
-        tts_config="GPT_SoVITS/configs/tts_infer.yaml",
-        # optional: switch trained weights after startup
-        # gpt_weights="/data/zynnova_workspace/zynvox/models/voice/s1.ckpt",
-        # sovits_weights="/data/zynnova_workspace/zynvox/models/voice/s2.pth",
+        gpt_weights="/data/models/gpt.ckpt",
+        sovits_weights="/data/models/sovits.pth",
     )
 )
 
-studio = ZynVoxStudio("/data/zynnova_workspace", engine=engine)
+studio = ZynVoxStudio(workspace=workspace, engine=engine)
 ```
 
-This adapter exposes upstream controls including top-k, top-p, temperature, split method, batch size, speed, fragment interval, seed, parallel inference, repetition penalty, VITS sampling steps, super-sampling, and streaming modes through the ZynVox request/`extra` fields. It can reuse an already-running local `api_v2.py` port or start/stop the process itself.
+该适配器负责管理外部 `api_v2.py` 服务并把 `GenerationRequest` 映射到外部 TTS 参数，包括 top-k/top-p、temperature、batch、速度、seed、并行推理、重复惩罚、流式模式等。
 
-## 5.4 Attach any other GPT-SoVITS-class engine
+> [!NOTE]
+> `GPTSoVITSLocalEngine` 当前是 TTS adapter。语音转换请使用 ZynVox 原有 VC backend，或注册一个同时实现 `synthesize()` 和 `convert()` 的组合/自定义 engine。
 
-External voice repositories live outside ZynNova:
+### 8.9 自定义外部 Engine
 
-```text
-/data/zynnova_workspace/zynvox/engines/my_engine/
-```
-
-Configure a stable command driver:
+`CommandVoiceEngine` 使用稳定的 JSON job contract 启动任意外部程序。
 
 ```python
-from zynnova.zynvox.studio import (
-    CommandVoiceEngine,
-    VoiceEngineProfile,
-    ZynVoxStudio,
-)
+from zynnova.zynvox import CommandVoiceEngine, VoiceEngineProfile
 
-profile = VoiceEngineProfile(
-    name="my-gpt-sovits-class-engine",
-    root="/data/zynnova_workspace/zynvox/engines/my_engine",
-    python="/data/envs/voice/bin/python",
-    infer_module="zynnova_voice_driver.infer",
-    vc_module="zynnova_voice_driver.vc",
-)
-
-studio = ZynVoxStudio(
-    "/data/zynnova_workspace",
-    engine=CommandVoiceEngine(profile),
+engine = CommandVoiceEngine(
+    VoiceEngineProfile(
+        name="custom-engine",
+        root="/data/external/custom_voice",
+        python="python",
+        infer_command=["python", "infer.py"],
+        vc_command=["python", "convert.py"],
+    )
 )
 ```
 
-The driver receives:
+ZynNova 写入 job JSON，外部 engine 只需读取 job 并把最终 WAV 写到约定输出路径。
+
+### 8.10 ZynVox 自有 REST API
+
+启动：
 
 ```bash
-python -m zynnova_voice_driver.infer --zynnova-job /path/to/output.wav.job.json
+zynvox-studio serve --host 0.0.0.0 --port 8765
 ```
 
-The job is JSON and contains a stable `zynnova-zynvox-studio-v1` contract, including:
-
-- requested output path,
-- target voice/reference audio,
-- reference transcript,
-- language,
-- model identifier,
-- sampling controls,
-- streaming/parallel hints,
-- additional engine-specific options.
-
-The external driver must write the requested WAV path and exit with status 0. This isolates GPT-SoVITS-version-specific internals from ZynNova's public API.
-
----
-
-## 5.5 Dataset preparation
-
-```python
-from pathlib import Path
-from zynnova.zynvox.studio import (
-    DatasetPrepareConfig,
-    VoiceWorkspace,
-    prepare_dataset,
-)
-
-manifest = prepare_dataset(
-    DatasetPrepareConfig(
-        dataset_name="speaker_a",
-        input_audio=(Path("/data/raw/a.wav"), Path("/data/raw/b.wav")),
-        language="zh",
-        sample_rate=32000,
-        min_segment_s=1.0,
-        max_segment_s=15.0,
-        silence_db=-42,
-        transcribe=True,
-        whisper_model="large-v3",
-    ),
-    VoiceWorkspace("/data/zynnova_workspace"),
-)
-```
-
-Output:
-
-```text
-zynvox/datasets/speaker_a/
-├── wavs/
-└── manifest.csv   # audio, language, text
-```
-
----
-
-## 5.6 Training orchestration
-
-ZynNova intentionally does not copy external training code into its package. Training is executed against an external engine checkout through explicit stage commands or the standard driver contract.
-
-```python
-from zynnova.zynvox.studio import TrainingConfig, train_voice_model
-
-result = train_voice_model(
-    TrainingConfig(
-        dataset_manifest=manifest,
-        run_name="speaker_a_v1",
-        stages=("prepare-text", "ssl-features", "semantic", "acoustic"),
-        batch_size=4,
-        epochs_semantic=15,
-        epochs_acoustic=8,
-    ),
-    profile,
-    studio.workspace,
-)
-```
-
-Each stage writes a log, the full job configuration is retained, and model outputs are located under the external `zynvox/models` directory.
-
----
-
-## 5.7 ZynVox REST API
-
-```bash
-zynvox-studio --workspace /data/zynnova_workspace serve \
-  --host 127.0.0.1 --port 8770
-```
-
-Endpoints:
+核心端点：
 
 ```text
 GET  /v1/health
@@ -747,479 +537,1016 @@ POST /v1/datasets/prepare
 POST /v1/training/run
 ```
 
-The speech endpoint intentionally resembles common `/v1/audio/speech` clients, but it is a ZynNova-owned API and is independent of GPT-SoVITS WebUI's HTTP API.
+因此客户端只依赖 **ZynVox API**，而不需要绑定第三方 WebUI 的页面逻辑。
 
-Example:
-
-```bash
-curl http://127.0.0.1:8770/v1/audio/speech \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "input": "ZynVox Studio test",
-    "voice": "my_voice",
-    "language": "en",
-    "temperature": 1.0,
-    "stream": false
-  }' \
-  --output speech.wav
-```
-
----
-
-## 5.8 Gradio UI
+### 8.11 Gradio UI
 
 ```bash
-zynvox-studio --workspace /data/zynnova_workspace ui \
-  --host 127.0.0.1 --port 7861
+zynvox-studio ui --host 127.0.0.1 --port 7860
 ```
 
-The UI calls exactly the same `ZynVoxStudio` Python API as the REST server.
+UI 是可选入口；Python API 和 REST API 才是稳定主干。
+
+### 8.12 完整测试 Notebook
+
+仓库外可直接运行：
+
+```text
+ZynVox_Studio_Full_Test.ipynb
+```
+
+Notebook 默认使用合成音频 + dummy/command engine，因此不需要真实人物语音也能覆盖大部分 Studio contract；真实 GPT-SoVITS、真实 VC、ASR、Gradio 被设计成显式开关。
 
 ---
 
-# 6. ZynVista — scene reconstruction and large-world generation
+## 9. ZynAstra —— LLM / Agent 框架
 
-Existing ZynVista remains the authoritative metric reconstruction path. It already supports:
+`zynnova.llm.zynastra` 是 `src/zynnova/llm/` 下的第一套完整 Agent 框架。
 
-- image-conditioned reconstruction,
-- video frame sampling,
-- dense-view fusion,
-- point-cloud and mesh construction,
-- geometry audits,
-- geometry-locked style transfer,
-- cross-DCC export,
-- COLMAP text export,
-- world hierarchy / LOD chunk export,
-- preservation of native backend assets including Gaussian-splat outputs when supplied.
+### 9.1 核心能力
 
-0.3.0 adds `SceneStudio` and an external generator contract so large models can evolve independently from the stable scientific geometry layer.
+- OpenAI Responses 路径；
+- 通用 OpenAI-compatible Chat Completions；
+- SiliconFlow、ModelScope、vLLM、LM Studio 等兼容端点；
+- 可选 LiteLLM Provider；
+- 本地 Transformers 推理；
+- Tool calling；
+- ZynNova 公共 API 自动工具化；
+- JSON → `dataclass` / `Enum` / `Path` / 容器自动类型转换；
+- SQLite session memory；
+- Skills；
+- MCP stdio；
+- MCP Streamable HTTP；
+- 多步 Agent loop；
+- 多 session 并行执行；
+- 结构化输出；
+- 本地模型下载；
+- LoRA / QLoRA；
+- FastAPI；
+- CLI。
 
-## 6.1 Existing metric reconstruction
+### 9.2 Provider 与 Agent 解耦
+
+Provider 负责“模型怎样被调用”；Agent runtime 负责：
+
+```text
+Prompt
+  ↓
+Provider
+  ↓
+Tool Call?
+  ├─ No  → Final response
+  └─ Yes → Tool Registry → ZynNova/API/MCP/Skill
+                    ↓
+                 Result
+                    ↓
+                 Provider
+```
+
+因此更换供应商不需要重写 ZynNova tools。
+
+### 9.3 OpenAI-compatible 示例
 
 ```python
-from pathlib import Path
-from zynnova.zynvista import SceneConfig, SceneRequest, run_scene
+from zynnova.llm.zynastra import Agent, AgentConfig, ProviderConfig, Workspace
+from zynnova.llm.zynastra.providers import create_provider
 
-result = run_scene(
-    SceneRequest(
-        images=(Path("view_01.png"), Path("view_02.png")),
-        mode="reconstruct",
-        backend="auto",
-    ),
-    SceneConfig(
-        build_mesh=True,
-        build_world_hierarchy=True,
-        export_formats=("ply", "glb", "usd"),
-    ),
-)
-```
+workspace = Workspace("/data/zynnova_workspace")
 
----
-
-## 6.2 Modern external world generators
-
-The 0.3.0 contract is designed to accommodate text/image/multiview/video-conditioned engines and mixed representations such as mesh + 3D Gaussian splats.
-
-```python
-from zynnova.zynvista import (
-    CommandSceneEngine,
-    GenerativeSceneRequest,
-    SceneEngineProfile,
-    SceneStudio,
-)
-
-studio = SceneStudio("/data/zynnova_workspace")
-
-profile = SceneEngineProfile(
-    name="hy-world-2",
-    root="/data/external/HY-World-2",
-    python="/data/envs/world/bin/python",
-    module="zynnova_world_driver",
-)
-
-studio.register_engine("hy-world-2", CommandSceneEngine(profile))
-
-bundle = studio.generate(
-    GenerativeSceneRequest(
-        prompt="a physically plausible battery research laboratory",
-        model="my-world-checkpoint",
-        geometry_mode="mesh+3dgs",
-        texture_mode="pbr",
-        seed=7,
-    ),
-    engine="hy-world-2",
-)
-
-print(bundle.assets)
-```
-
-A command engine receives `--zynnova-job job.json` and writes `result.json`:
-
-```json
-{
-  "assets": {
-    "mesh": "scene.glb",
-    "gaussian_splat": "scene.spz",
-    "point_cloud": "scene.ply",
-    "cameras": "cameras.json",
-    "depth": "depth.npz",
-    "normals": "normals.npz"
-  },
-  "metadata": {
-    "metric": true
-  }
-}
-```
-
-All referenced files are validated and copied into the ZynNova run export directory.
-
-Good external targets for custom drivers include current large-world generators, Nerfstudio/3DGS reconstruction stacks, and other models that can return explicit geometry or native splat assets. Their repositories and checkpoints remain outside ZynNova.
-
----
-
-## 6.3 Download scene checkpoints outside the package
-
-```python
-from zynnova.zynvista import download_scene_model
-
-path = download_scene_model(
-    "<hugging-face-scene-model-id>",
-    "/data/zynnova_workspace",
-)
-```
-
----
-
-# 7. ZynForm — high-fidelity object generation, repair and FEM
-
-Existing ZynForm keeps:
-
-- image-conditioned 3D object generation,
-- native textured/PBR asset preservation,
-- surface audit,
-- surface cleanup/repair,
-- physical scaling,
-- TetGen/Gmsh/voxel tetrahedralization,
-- FEM-ready Tet4 quality checks,
-- DCC and FEM export.
-
-0.3.0 adds `ObjectStudio` for modern image/multiview/text-to-3D engines.
-
-```python
-from pathlib import Path
-from zynnova.zynform import (
-    CommandObjectEngine,
-    GenerativeObjectRequest,
-    ObjectEngineProfile,
-    ObjectStudio,
-)
-
-studio = ObjectStudio("/data/zynnova_workspace")
-
-profile = ObjectEngineProfile(
-    name="trellis2",
-    root="/data/external/TRELLIS.2",
-    python="/data/envs/3d/bin/python",
-    module="zynnova_object_driver",
-)
-
-studio.register_engine("trellis2", CommandObjectEngine(profile))
-
-bundle = studio.generate(
-    GenerativeObjectRequest(
-        images=(Path("object.png"),),
-        texture_mode="pbr",
-        topology_mode="production",
-        target_extent_m=0.012,
-    ),
-    engine="trellis2",
-    repair=True,
-    generate_fem=True,
-)
-```
-
-The external object driver must provide at least a `mesh` role in `result.json`; it may additionally provide `pbr`, `glb`, texture maps, multiview renderings, or other native assets.
-
-After external generation, `ObjectStudio` can:
-
-1. load the mesh into ZynNova geometry,
-2. clean/repair it,
-3. apply a physical metric scale,
-4. preserve/scale the native PBR scene when possible,
-5. tetrahedralize it with the existing ZynForm/ZynMorph FEM path,
-6. retain a reproducible run manifest.
-
-This makes modern generative models a front end to the existing scientific/FEM pipeline rather than a replacement for it.
-
-Current external driver targets can include image-to-3D PBR systems such as TRELLIS.2 or Hunyuan3D-2.1; exact third-party CLIs are deliberately isolated in adapters because those projects change faster than ZynNova's public API.
-
----
-
-# 8. ZynMorph and ZynSim
-
-The 0.3.0 upgrade does not remove or replace the existing scientific modules.
-
-## ZynMorph
-
-Use it for:
-
-- voxel microstructures,
-- multiphase electrode structures,
-- surface extraction and repair,
-- free-form regions,
-- tetrahedral meshing,
-- native TetGen integration,
-- region/material mappings,
-- mesh export suitable for downstream FEM workflows.
-
-## ZynSim
-
-Use it for:
-
-- battery/multiphysics simulations,
-- FEM-related studies,
-- scientific IO,
-- image and geometry workflows,
-- optional HPC backends.
-
-ZynAstra can discover and invoke these APIs through the same tool layer as ZynVista, ZynForm, and ZynVox.
-
----
-
-# 9. Agent + scientific workflow example
-
-```python
-import asyncio
-from zynnova.llm.zynastra import Agent, ProviderConfig
-
-async def main():
-    agent = Agent.create(
-        ProviderConfig.siliconflow("<model-id>"),
-        "/data/zynnova_workspace",
+provider = create_provider(
+    ProviderConfig(
+        provider="openai-compatible",
+        model="your-model",
+        base_url="https://your-compatible-endpoint/v1",
+        api_key_env="YOUR_API_KEY",
     )
-    try:
-        result = await agent.run(
-            """
-            Inspect zynnova.zynmorph and zynnova.zynsim.
-            Find the public APIs needed to create a multiphase electrode geometry,
-            tetrahedralize it, export it, and prepare it for a simulation.
-            Use tools to verify function signatures instead of guessing.
-            """
-        )
-        print(result.text)
-    finally:
-        await agent.aclose()
+)
 
-asyncio.run(main())
+agent = Agent(
+    provider,
+    workspace,
+    config=AgentConfig(name="ZynAstra"),
+)
+
+result = await agent.run("分析这个任务并选择合适的工具。")
+print(result)
 ```
 
-The same agent can call `zynvista`, `zynform`, and `zynvox` functions when those roots remain in `allowed_zynnova_roots`.
+### 9.4 SiliconFlow / ModelScope 等
+
+只需要更换：
+
+- `base_url`；
+- `model`；
+- API key 环境变量。
+
+不要把密钥硬编码到 Python 文件、Notebook 或 Git 仓库。
+
+### 9.5 调用 ZynNova 功能
+
+ZynAstra tool bridge 可以把公共 ZynNova Python API 注册成 Agent tool。复杂参数会从 JSON 自动转换成对应 Python 类型，因此 `SceneRequest`、`ObjectRequest`、FEM 配置等不需要再维护一套重复的数据模型。
+
+### 9.6 Skills
+
+推荐每个技能单独目录：
+
+```text
+skills/
+└── battery-meshing/
+    ├── SKILL.md
+    └── ...
+```
+
+Skill 用于保存稳定的工作方法、工具约束、领域规范和可复用流程，而不是取代 Python API。
+
+### 9.7 MCP
+
+MCP 适合作为外部工具和数据源协议。ZynAstra 将 MCP 与内部 Python tools 放在同一个 Agent loop 中，上层不需要知道工具来自本地函数还是 MCP server。
+
+### 9.8 本地模型下载
+
+模型必须下载到包外：
+
+```python
+from zynnova.llm.zynastra.models import download_model
+
+path = download_model(
+    repo_id="your-org/your-model",
+    workspace="/data/zynnova_workspace",
+)
+print(path)
+```
+
+### 9.9 LoRA / QLoRA
+
+微调输出同样进入外部 workspace：
+
+```text
+/data/zynnova_workspace/finetunes/<run>/
+```
+
+ZynNova 负责训练配置、数据入口和产物登记，不把 adapter 或基础模型提交回 Python 包目录。
 
 ---
 
-# 10. CLI summary
+## 10. CLI
 
-```text
-zynnova                 existing ZynNova CLI
-zynnova-llm             ZynAstra chat / local-model download / fine-tune / server
-zynvox-studio           ZynVox synthesis / API server / UI
-```
-
-Examples:
+### ZynNova
 
 ```bash
-zynnova-llm --workspace /data/zynnova_workspace chat \
-  "List the ZynVista generation APIs" \
-  --provider openai-compatible \
-  --model gpt-5.6 \
-  --base-url https://api.openai.com/v1 \
-  --api-style responses
+zynnova --help
+```
 
-zynnova-llm --workspace /data/zynnova_workspace \
-  download-model <model-id>
+### ZynAstra
 
-zynvox-studio --workspace /data/zynnova_workspace \
-  speak "test" --voice my_voice --language en
+```bash
+zynnova-llm --help
+```
+
+### ZynVox Studio
+
+```bash
+zynvox-studio --help
+zynvox-studio speak "你好，ZynNova" --voice my_voice --language zh
+zynvox-studio serve --host 0.0.0.0 --port 8765
+zynvox-studio ui --host 127.0.0.1 --port 7860
 ```
 
 ---
 
-# 11. Extension contracts
+## 11. 开发原则
 
-## New LLM framework
+### 11.1 不把大型模型写死进主干
 
-Create a sibling package:
+主干定义稳定 contract，模型作为外部 engine。
+
+### 11.2 保持科学模块可独立使用
+
+安装 LLM 或语音依赖不应成为运行 ZynMorph/ZynSim 的前提。
+
+### 11.3 保留单位和 provenance
+
+几何、物理量、模型版本、输入、输出、工作区和外部 engine 都应有可追踪元数据。
+
+### 11.4 显式区分参考实现和真实后端
+
+测试中的 dummy engine 只验证协议正确性，不应被表述为真实高质量生成模型。
+
+### 11.5 所有重资产进入外部 workspace
+
+包括：
+
+- LLM checkpoint；
+- 语音模型；
+- ASR 模型；
+- 3D/世界生成模型；
+- 训练 checkpoint；
+- 大型数据集；
+- 运行资产。
+
+---
+
+## 12. 测试
+
+基础测试：
+
+```bash
+pytest -q
+```
+
+建议分层：
+
+1. **Contract smoke test**：dummy engine、tool loop、JSON contract；
+2. **Optional backend test**：有对应依赖时测试真实第三方 engine；
+3. **GPU/model integration test**：显式启用，不应作为基础安装的强制测试；
+4. **Long-running benchmark**：独立运行，不阻塞普通 CI。
+
+ZynVox 推荐先运行本仓库配套的：
 
 ```text
-src/zynnova/llm/my_new_framework/
+ZynVox_Studio_Full_Test.ipynb
 ```
 
-Keep its providers, tools, memory, MCP and runtime internal unless you explicitly want interoperability. `zynnova.llm.__init__` may export selected stable entry points.
+---
 
-## New ZynAstra provider
+## 13. 安全、同意与数据治理
 
-Implement the `ModelProvider` protocol:
+ZynNova 的语音、LLM、场景和对象功能可能处理敏感或受授权限制的数据。
 
-```python
-class MyProvider:
-    name = "mine"
+请遵循：
 
-    async def complete(self, messages, tools=()):
-        ...
+- 对真实人物语音，保存明确 consent basis；
+- 不把 API key 写入 Git；
+- 不把私有训练数据提交到公开仓库；
+- 对外部模型遵守其许可证；
+- 对生成资产保留模型、版本、输入与处理 provenance；
+- 对科学模拟保留单位、网格、材料区域和求解配置。
 
-    async def aclose(self):
-        ...
+---
+
+## 14. 项目状态
+
+ZynNova 仍处于持续快速开发阶段。公共 API 会尽量保持稳定，但前沿生成模型、外部模型仓库与第三方服务会继续变化，因此它们应通过 adapter/contract 层接入，而不是成为核心包内部不可替换的实现细节。
+
+---
+
+## 15. License
+
+请以仓库根目录 `LICENSE` 为准。第三方模型、数据集和外部引擎可能拥有不同许可证；使用它们时应分别遵守对应条款。
+
+<p align="right"><a href="#top"><kbd>返回顶部</kbd></a> · <a href="#en"><kbd>English</kbd></a></p>
+
+---
+---
+
+<a id="en"></a>
+
+# English Documentation
+
+<p align="right"><a href="#zh-cn"><kbd>切换到中文</kbd></a></p>
+
+## What is ZynNova?
+
+**ZynNova** is an extensible Python/C++ framework for scientific intelligence, materials computation, multiscale simulation, 3D reconstruction and generation, speech intelligence, and tool-using LLM agents.
+
+The current architecture unifies several capabilities that would otherwise become disconnected projects:
+
+- **ZynMorph** — multiphase microstructures, voxels, surfaces, tetrahedral FEM meshes, and engineering exports;
+- **ZynSim** — numerical workflows for materials, electrochemistry, batteries, FEM, and multiphysics;
+- **ZynVista** — image/video-conditioned metric scene reconstruction, large-world generation, 3DGS/mesh preservation, style workflows, and DCC export;
+- **ZynForm** — high-fidelity image-to-object generation, surface repair, physical scaling, multi-format export, and FEM meshing;
+- **ZynVox** — consent-aware voice cloning, TTS, voice conversion, dataset preparation, training orchestration, streaming APIs, and an optional UI;
+- **ZynAstra** — the first complete LLM/Agent framework under `src/zynnova/llm/zynastra/`, with hosted APIs, local models, Skills, MCP, tools, memory, and LoRA/QLoRA fine-tuning.
+
+ZynNova deliberately does **not** embed every large checkpoint inside the Python package. The repository provides stable **APIs, runtimes, contracts, quality gates, asset management, workspaces, and adapters**. Large speech, LLM, 3D, and world-generation repositories and checkpoints belong in a user-selected workspace outside the package.
+
+> [!IMPORTANT]
+> Keep the ZynNova source tree installable and maintainable. Multi-gigabyte model repositories, datasets, and checkpoints should not be committed into `src/zynnova/`.
+
+---
+
+## 1. Architecture
+
+```text
+ZynNova/
+├── src/zynnova/
+│   ├── core/                 # shared structures, errors, serialization, backend contracts
+│   ├── data/                 # scientific and materials data
+│   ├── dynamics/             # dynamics workflows
+│   ├── geometry/             # shared geometry, point clouds, surfaces, cameras, volume meshes
+│   ├── llm/
+│   │   └── zynastra/         # first complete independent LLM / Agent framework
+│   │       ├── providers/    # OpenAI-compatible / LiteLLM / local Transformers
+│   │       ├── tools/        # tool registry + ZynNova API bridge
+│   │       ├── skills/       # portable SKILL.md skills
+│   │       ├── mcp/          # MCP stdio / Streamable HTTP
+│   │       ├── memory.py     # SQLite session memory
+│   │       ├── models.py     # external-workspace model downloads
+│   │       ├── finetune.py   # LoRA / QLoRA SFT
+│   │       ├── runtime.py    # multi-step agent runtime
+│   │       ├── server.py     # optional FastAPI service
+│   │       └── cli.py        # CLI
+│   ├── ml/                   # ML models and potentials
+│   ├── structure/            # crystal, molecule, polymer representations
+│   ├── tools/                # shared utilities
+│   ├── visualization/        # reusable scientific visualization
+│   ├── zynmorph/             # microstructures, voxels, surfaces, TetGen/FEM
+│   ├── zynsim/               # multiphysics / FEM / battery simulation
+│   ├── zynvista/             # scene reconstruction, worlds, 3DGS/mesh, DCC
+│   │   ├── external.py       # external scene-model contract
+│   │   ├── model_hub.py      # external model workspace
+│   │   └── studio.py         # SceneStudio
+│   ├── zynform/              # object generation, repair, scale, FEM
+│   │   ├── external.py       # external object-model contract
+│   │   ├── model_hub.py      # external model workspace
+│   │   └── studio.py         # ObjectStudio
+│   └── zynvox/
+│       └── studio/            # data, training, inference, API, UI, external voice engines
+├── tests/
+├── pyproject.toml
+└── README.md
 ```
 
-Then add construction logic to `providers/registry.py`.
+Future LLM frameworks should remain independent siblings:
 
-## New Agent tool
+```text
+src/zynnova/llm/
+├── zynastra/       # complete framework 1
+├── <framework-2>/  # complete framework 2
+└── <framework-3>/  # complete framework 3
+```
+
+Each directory can evolve as a complete framework without sharing mutable global provider registries or agent state.
+
+---
+
+## 2. Installation
+
+### 2.1 Core
+
+```bash
+git clone https://github.com/Zephyrainzjl/ZynNova.git
+cd ZynNova
+python -m pip install -e .
+```
+
+### 2.2 Scientific subsystems
+
+```bash
+python -m pip install -e ".[zynmorph-all]"
+python -m pip install -e ".[zynsim-all]"
+python -m pip install -e ".[zynnova-scene]"
+python -m pip install -e ".[zynnova-object]"
+python -m pip install -e ".[zynnova-voice]"
+```
+
+### 2.3 ZynVox Studio
+
+```bash
+python -m pip install -e ".[voice-studio]"
+```
+
+Optional ASR labeling:
+
+```bash
+python -m pip install -e ".[voice-studio-asr]"
+```
+
+Optional Gradio UI:
+
+```bash
+python -m pip install -e ".[voice-ui]"
+```
+
+### 2.4 ZynAstra
+
+Hosted OpenAI-compatible APIs:
+
+```bash
+python -m pip install -e ".[llm]"
+```
+
+Broad provider routing:
+
+```bash
+python -m pip install -e ".[llm-providers]"
+```
+
+MCP:
+
+```bash
+python -m pip install -e ".[llm-mcp]"
+```
+
+Local Hugging Face models and LoRA:
+
+```bash
+python -m pip install -e ".[llm-local]"
+```
+
+QLoRA on a suitable Linux/CUDA environment:
+
+```bash
+python -m pip install -e ".[llm-local-qlora]"
+```
+
+Combined ZynAstra feature set:
+
+```bash
+python -m pip install -e ".[llm-all]"
+```
+
+### 2.5 External 3D model helpers
+
+```bash
+python -m pip install -e ".[scene-models,object-models]"
+```
+
+> [!NOTE]
+> The core installation does not force Transformers, Faster-Whisper, Gradio, training stacks, or large 3D-model dependencies onto scientific-only users.
+
+---
+
+## 3. External workspaces
+
+Set a common root:
+
+```bash
+# Linux / WSL
+export ZYNNOVA_WORKSPACE=/data/zynnova_workspace
+
+# PowerShell
+$env:ZYNNOVA_WORKSPACE = "D:\\zynnova_workspace"
+```
+
+Recommended layout:
+
+```text
+/data/zynnova_workspace/
+├── models/
+├── finetunes/
+├── runs/
+├── skills/
+├── memory/
+├── zynvox/
+│   ├── datasets/
+│   ├── models/
+│   ├── engines/
+│   ├── voices/
+│   ├── runs/
+│   └── cache/
+├── zynvista/
+│   ├── models/
+│   └── runs/
+└── zynform/
+    ├── models/
+    └── runs/
+```
+
+Speech can use a dedicated location through `ZYNNOVA_VOICE_WORKSPACE`. Scene and object subsystems can likewise use subsystem-specific workspaces.
+
+---
+
+## 4. ZynMorph — microstructures and FEM meshes
+
+ZynMorph handles complex multiphase material structures and turns parameterized geometry, voxels, or imported geometry into computational meshes.
+
+Typical capabilities include:
+
+- multiphase voxel structures;
+- electrode particles, electrolyte, separators, and other material regions;
+- irregular surface extraction and smoothing;
+- complex connected topology;
+- surface repair;
+- TetGen tetrahedralization;
+- region and boundary label preservation;
+- VTK, MSH, INP, COMSOL `mphtxt`, and related exports;
+- integration with ZynSim FEM/multiphysics workflows.
+
+The key rule is traceability: geometry labels and physical regions should survive voxel → surface → tetrahedra → export transformations.
+
+---
+
+## 5. ZynSim — multiscale and multiphysics simulation
+
+ZynSim organizes numerical workflows for areas such as:
+
+- FEM;
+- electrochemistry;
+- heat transfer;
+- mass transport;
+- porous media;
+- battery electrodes and separators;
+- phase-field and related multiphysics workflows;
+- meshes, materials, boundary conditions, and result export.
+
+ZynMorph answers “how does a structure become a high-quality computational mesh?” while ZynSim answers “how is a physical problem defined and solved on those regions and meshes?”
+
+---
+
+## 6. ZynVista — scene reconstruction and large worlds
+
+ZynVista targets image/video-conditioned 3D scenes:
+
+- image-conditioned scene recovery;
+- video-conditioned reconstruction;
+- metric scale and camera handling;
+- large-scene/world generation;
+- 3D Gaussian Splatting assets;
+- mesh preservation and geometry audits;
+- depth, normals, cameras, materials, and auxiliary assets;
+- style workflows that preserve usable geometry;
+- asset export for Blender, Maya, Houdini, and other DCC tools.
+
+### 6.1 External-model contract
+
+Fast-moving world models should not be hard-coded into the ZynVista core:
+
+```text
+Input
+  ↓
+ZynVista SceneRequest
+  ↓
+external reconstruction / generation engine
+  ↓
+mesh / PBR / 3DGS / cameras / depth / normals / metadata
+  ↓
+ZynVista QA, metric handling, asset organization, export
+```
+
+Repositories and checkpoints remain outside the package, so the underlying model can be replaced without changing the upper-level ZynNova API.
+
+---
+
+## 7. ZynForm — high-fidelity image-to-object workflows
+
+ZynForm focuses on individual objects and engineering-ready geometry:
+
+- image-to-3D;
+- multi-view-to-3D;
+- mesh/PBR assets;
+- hole/non-manifold/surface repair;
+- physical scaling;
+- remeshing and topology quality control;
+- OBJ / PLY / STL / GLB and related export;
+- tetrahedral FEM meshes;
+- integration with ZynMorph and ZynSim.
+
+External generators enter through `ObjectStudio`; engineering post-processing remains controlled by ZynNova.
+
+---
+
+## 8. ZynVox — speech intelligence
+
+ZynVox contains the original speech functionality plus **ZynVox Studio**, which provides dataset preparation, training orchestration, inference, APIs, UI, external-engine management, and workspaces.
+
+The goal is for application code to depend on a stable ZynNova API rather than directly depending on one third-party WebUI.
+
+### 8.1 Capabilities
+
+- consent records and voice profiles;
+- few-shot / zero-shot TTS workflows;
+- voice conversion;
+- dataset segmentation;
+- optional Faster-Whisper transcription;
+- external training-stage orchestration;
+- external speech-engine registration;
+- managed local GPT-SoVITS TTS adapter;
+- streaming HTTP output;
+- FastAPI service;
+- optional Gradio UI;
+- model/data/run artifacts in an external workspace.
+
+> [!CAUTION]
+> Before cloning or converting a real person's voice, make sure you have appropriate authorization. A technical consent-record structure is not a substitute for permission.
+
+### 8.2 Create a Studio
 
 ```python
-from zynnova.llm.zynastra import ToolRegistry
+from zynnova.zynvox import VoiceWorkspace, ZynVoxStudio
 
-registry = ToolRegistry()
-registry.add(
-    "my_tool",
-    lambda value: {"square": value * value},
-    description="Square a number.",
-    parameters={
-        "type": "object",
-        "properties": {"value": {"type": "number"}},
-        "required": ["value"],
-        "additionalProperties": False,
-    },
+workspace = VoiceWorkspace("/data/zynnova_workspace")
+studio = ZynVoxStudio(workspace=workspace)
+```
+
+### 8.3 Enroll a voice
+
+```python
+from zynnova.zynvox import ConsentBasis, ConsentRecord
+
+consent = ConsentRecord(
+    confirmed=True,
+    basis=ConsentBasis.SELF,
+    purpose="personal voice model",
+)
+
+profile = studio.enroll_voice(
+    voice_id="my_voice",
+    reference_audio="/data/reference.wav",
+    reference_text="This is a reference recording.",
+    language="en",
+    consent=consent,
 )
 ```
 
-## New voice engine
-
-Implement:
+### 8.4 TTS
 
 ```python
-class MyVoiceEngine:
-    name = "my-engine"
-    def synthesize(self, request, profile, output): ...
-    def convert(self, source, profile, output, **options): ...
+from zynnova.zynvox import GenerationRequest
+
+result = studio.synthesize(
+    GenerationRequest(
+        text="Welcome to ZynNova.",
+        voice_id="my_voice",
+        language="en",
+        output_name="hello",
+        top_k=15,
+        top_p=1.0,
+        temperature=1.0,
+        speed=1.0,
+        repetition_penalty=1.35,
+        batch_size=1,
+        streaming=False,
+        parallel_infer=True,
+    )
+)
+
+print(result.audio)
 ```
 
-or use `CommandVoiceEngine` and keep the engine-specific implementation entirely outside ZynNova.
+### 8.5 Voice conversion
 
-## New scene/object generator
+When the selected engine supports VC:
 
-Use `CommandSceneEngine` / `CommandObjectEngine`, or implement their small `run(request, output_dir)` protocol directly.
+```python
+result = studio.voice_convert(
+    source_audio="/data/source.wav",
+    voice_id="my_voice",
+    output_name="converted",
+)
 
----
+print(result.audio)
+```
 
-# 12. Reproducibility and provenance
+### 8.6 Dataset preparation
 
-ZynNova's design rule is that difficult workflows should leave inspectable artifacts rather than only returning in-memory tensors.
+```python
+from zynnova.zynvox import DatasetPrepareConfig, prepare_dataset
 
-Existing scientific and 3D pipelines already use run manifests and quality files. New external Studio contracts also retain:
+manifest = prepare_dataset(
+    DatasetPrepareConfig(
+        dataset_name="speaker_a",
+        input_audio="/data/raw_recording.wav",
+        language="en",
+        min_segment_s=1.0,
+        max_segment_s=15.0,
+        transcribe=True,
+        whisper_model="large-v3",
+        whisper_device="auto",
+    ),
+    workspace=workspace,
+)
+```
 
-- input request,
-- selected engine/model,
-- output assets,
-- elapsed time,
-- external engine log,
-- job JSON,
-- result JSON.
+Use `transcribe=False` when ASR is not required.
 
-ZynVox continues to enforce authorization at the public voice boundary and the legacy pipeline continues to produce provenance/disclosure records.
+### 8.7 Training orchestration
 
-API keys are not written into these manifests by ZynAstra.
+Training remains an external-engine responsibility while ZynVox owns the stable job model:
 
----
+```python
+from zynnova.zynvox import TrainingConfig, VoiceEngineProfile, train_voice_model
 
-# 13. Security boundaries
+engine_profile = VoiceEngineProfile(
+    name="my-speech-engine",
+    root="/data/external_voice_engine",
+    python="python",
+)
 
-LLM tool execution is powerful. For production deployments:
+config = TrainingConfig(
+    dataset_manifest=manifest,
+    run_name="speaker_a_v1",
+    stages=("prepare-text", "ssl-features", "semantic", "acoustic"),
+    batch_size=4,
+    epochs_semantic=15,
+    epochs_acoustic=8,
+    precision="bf16",
+    device="cuda",
+)
 
-- keep `allowed_zynnova_roots` minimal,
-- expose only trusted MCP servers,
-- do not place secrets in skill files,
-- keep API keys in environment variables or a proper secret manager,
-- run untrusted external model repositories in dedicated environments/containers,
-- review model `trust_remote_code` requirements before enabling local inference,
-- bind development FastAPI servers to localhost unless authentication/network policy is configured externally.
+result = train_voice_model(config, engine_profile, workspace)
+```
 
-ZynAstra blocks private (`_...`) ZynNova attributes in the generic tool bridge, but this is an application boundary, not a general OS sandbox.
+Use `stage_commands` when the external repository requires custom commands for individual training stages.
 
----
+### 8.8 Managed local GPT-SoVITS adapter
 
-# 14. Voice authorization
+If a GPT-SoVITS repository is already present outside the package:
 
-ZynVox is intentionally consent-aware. The project supports legitimate voice conversion and speech synthesis where the target voice is:
+```python
+from zynnova.zynvox import GPTSoVITSLocalConfig, GPTSoVITSLocalEngine
 
-- the user's own voice,
-- directly authorized,
-- licensed for this use, or
-- valid public-domain/source material with evidence where required by the existing policy.
+engine = GPTSoVITSLocalEngine(
+    GPTSoVITSLocalConfig(
+        root="/data/external/GPT-SoVITS",
+        python="/data/envs/gpt-sovits/bin/python",
+        host="127.0.0.1",
+        port=9880,
+        gpt_weights="/data/models/gpt.ckpt",
+        sovits_weights="/data/models/sovits.pth",
+    )
+)
 
-The authorization record is part of the API contract rather than a UI-only checkbox.
+studio = ZynVoxStudio(workspace=workspace, engine=engine)
+```
 
----
+The adapter manages the external `api_v2.py` TTS service and maps `GenerationRequest` fields such as top-k/top-p, temperature, batch size, speed, seed, parallel inference, repetition penalty, and streaming mode.
 
-# 15. Third-party models and licenses
+> [!NOTE]
+> `GPTSoVITSLocalEngine` is currently a TTS adapter. Use the existing ZynVox VC backend or a composite/custom engine implementing both `synthesize()` and `convert()` for voice conversion.
 
-ZynNova does not automatically redistribute the checkpoints or repositories of GPT-SoVITS, HY-World, TRELLIS, Hunyuan3D, Nerfstudio, or other optional external projects. Install/download them separately into an external workspace and follow each project's license and model terms.
+### 8.9 Custom external engine
 
-The existing ZynNova license metadata also notes the separate license requirements of linked TetGen components. Keep third-party notices and source-license obligations intact when distributing binaries.
+`CommandVoiceEngine` provides a stable JSON job contract:
 
----
+```python
+from zynnova.zynvox import CommandVoiceEngine, VoiceEngineProfile
 
-# 16. Development checks
+engine = CommandVoiceEngine(
+    VoiceEngineProfile(
+        name="custom-engine",
+        root="/data/external/custom_voice",
+        python="python",
+        infer_command=["python", "infer.py"],
+        vc_command=["python", "convert.py"],
+    )
+)
+```
+
+ZynNova writes a job document; the external driver reads it and writes the resulting WAV to the requested output path.
+
+### 8.10 First-party REST API
+
+Start the server:
 
 ```bash
-python -m compileall src/zynnova
+zynvox-studio serve --host 0.0.0.0 --port 8765
+```
+
+Core endpoints:
+
+```text
+GET  /v1/health
+GET  /v1/voices
+POST /v1/voices/enroll
+GET  /v1/models
+POST /v1/audio/speech
+POST /v1/audio/voice-conversion
+POST /v1/datasets/prepare
+POST /v1/training/run
+```
+
+Clients therefore depend on the **ZynVox API**, not a third-party WebUI page contract.
+
+### 8.11 Optional Gradio UI
+
+```bash
+zynvox-studio ui --host 127.0.0.1 --port 7860
+```
+
+The Python API and REST API remain the stable core; the UI is optional.
+
+### 8.12 Full test notebook
+
+Use:
+
+```text
+ZynVox_Studio_Full_Test.ipynb
+```
+
+The notebook defaults to synthetic audio plus dummy/command engines, so most Studio contracts can be tested without using a real person's voice. Real GPT-SoVITS, ASR, legacy VC, and Gradio tests are explicit opt-in sections.
+
+---
+
+## 9. ZynAstra — LLM / Agent framework
+
+`zynnova.llm.zynastra` is the first complete framework under `src/zynnova/llm/`.
+
+### 9.1 Core capabilities
+
+- OpenAI Responses path;
+- generic OpenAI-compatible Chat Completions;
+- compatible SiliconFlow, ModelScope, vLLM, LM Studio, and private endpoints;
+- optional LiteLLM provider;
+- local Transformers inference;
+- tool calling;
+- automatic ZynNova public-API tools;
+- JSON → `dataclass` / `Enum` / `Path` / container conversion;
+- SQLite session memory;
+- Skills;
+- MCP stdio;
+- MCP Streamable HTTP;
+- multi-step agent loops;
+- concurrent sessions;
+- structured output;
+- local model downloads;
+- LoRA / QLoRA;
+- FastAPI;
+- CLI.
+
+### 9.2 Provider/runtime separation
+
+Providers answer “how is the model called?” while the agent runtime owns the tool loop:
+
+```text
+Prompt
+  ↓
+Provider
+  ↓
+Tool Call?
+  ├─ No  → Final response
+  └─ Yes → Tool Registry → ZynNova/API/MCP/Skill
+                    ↓
+                 Result
+                    ↓
+                 Provider
+```
+
+Changing providers therefore does not require rewriting ZynNova tools.
+
+### 9.3 OpenAI-compatible example
+
+```python
+from zynnova.llm.zynastra import Agent, AgentConfig, ProviderConfig, Workspace
+from zynnova.llm.zynastra.providers import create_provider
+
+workspace = Workspace("/data/zynnova_workspace")
+
+provider = create_provider(
+    ProviderConfig(
+        provider="openai-compatible",
+        model="your-model",
+        base_url="https://your-compatible-endpoint/v1",
+        api_key_env="YOUR_API_KEY",
+    )
+)
+
+agent = Agent(
+    provider,
+    workspace,
+    config=AgentConfig(name="ZynAstra"),
+)
+
+result = await agent.run("Analyze this task and choose the appropriate tools.")
+print(result)
+```
+
+### 9.4 SiliconFlow, ModelScope, and compatible endpoints
+
+Change only the endpoint, model ID, and API-key environment variable when the service implements the expected OpenAI-compatible contract.
+
+Never hard-code API keys into Python files, notebooks, or Git repositories.
+
+### 9.5 ZynNova tools
+
+The ZynAstra bridge can expose public ZynNova Python APIs as agent tools. Complex JSON arguments are converted into their Python types, avoiding duplicate schemas for scene requests, object requests, FEM configuration objects, and similar APIs.
+
+### 9.6 Skills
+
+Recommended structure:
+
+```text
+skills/
+└── battery-meshing/
+    ├── SKILL.md
+    └── ...
+```
+
+Skills encode reusable workflows, domain rules, and tool instructions. They complement rather than replace Python APIs.
+
+### 9.7 MCP
+
+MCP tools can participate in the same agent loop as local Python tools, allowing external services and data sources to be integrated without changing the high-level agent interface.
+
+### 9.8 Local model downloads
+
+Keep snapshots outside the package:
+
+```python
+from zynnova.llm.zynastra.models import download_model
+
+path = download_model(
+    repo_id="your-org/your-model",
+    workspace="/data/zynnova_workspace",
+)
+print(path)
+```
+
+### 9.9 LoRA / QLoRA
+
+Fine-tuning artifacts likewise stay outside the source tree:
+
+```text
+/data/zynnova_workspace/finetunes/<run>/
+```
+
+---
+
+## 10. CLI
+
+### ZynNova
+
+```bash
+zynnova --help
+```
+
+### ZynAstra
+
+```bash
+zynnova-llm --help
+```
+
+### ZynVox Studio
+
+```bash
+zynvox-studio --help
+zynvox-studio speak "Hello ZynNova" --voice my_voice --language en
+zynvox-studio serve --host 0.0.0.0 --port 8765
+zynvox-studio ui --host 127.0.0.1 --port 7860
+```
+
+---
+
+## 11. Development principles
+
+### 11.1 Do not hard-code large models into the core
+
+The core defines stable contracts; models remain replaceable external engines.
+
+### 11.2 Keep scientific modules independently usable
+
+LLM and speech dependencies must not become prerequisites for ZynMorph or ZynSim.
+
+### 11.3 Preserve units and provenance
+
+Geometry, physical quantities, model versions, inputs, outputs, workspaces, and external engines should remain traceable.
+
+### 11.4 Distinguish smoke-test engines from production models
+
+A dummy engine validates contracts; it does not claim production-quality speech or 3D generation.
+
+### 11.5 Put heavyweight artifacts in external workspaces
+
+This includes LLM checkpoints, speech models, ASR models, 3D/world-generation models, training checkpoints, large datasets, and generated assets.
+
+---
+
+## 12. Testing
+
+Run the basic suite with:
+
+```bash
 pytest -q
-ruff check src tests
 ```
 
-For editable native builds:
+Recommended test layers:
 
-```bash
-pip install -v -e .
+1. **Contract smoke tests** — dummy engines, tool loops, JSON contracts;
+2. **Optional backend tests** — real third-party engines when dependencies are present;
+3. **GPU/model integration tests** — explicitly enabled, never mandatory for a lightweight installation;
+4. **Long-running benchmarks** — separate from normal CI.
+
+For ZynVox, start with:
+
+```text
+ZynVox_Studio_Full_Test.ipynb
 ```
-
-For the full heavy subsystem you are actively developing, install only its needed extras rather than every optional dependency at once.
 
 ---
 
-# 17. 0.3.0 upgrade summary
+## 13. Safety, consent, and data governance
 
-### Added
+ZynNova speech, LLM, scene, and object workflows may process sensitive or licensed data.
 
-- `src/zynnova/llm/`
-- complete `src/zynnova/llm/zynastra/` agent framework
-- OpenAI Responses + generic OpenAI-compatible provider
-- LiteLLM provider
-- local Transformers provider
-- ZynNova-wide typed tool bridge
-- skills
-- MCP client bridge
-- SQLite session memory
-- external-workspace model download
-- LoRA / QLoRA SFT
-- ZynAstra FastAPI + CLI
-- `src/zynnova/zynvox/studio/`
-- ZynVox first-party REST API
-- voice enrollment/model listing
-- TTS/VC Studio API
-- dataset preprocessing + optional ASR
-- staged external-engine training orchestration
-- Gradio UI
-- ZynVista external model hub / engine contract / SceneStudio
-- ZynForm external model hub / engine contract / ObjectStudio
-- modern world/object generation → existing geometry/FEM bridge
+Recommended practices:
 
-### Modified
+- retain an explicit consent basis for real-person speech;
+- never commit API keys;
+- do not publish private training data by accident;
+- respect external model licenses;
+- retain model/version/input/processing provenance for generated assets;
+- retain units, meshes, material regions, and solver configuration for scientific simulations.
 
-- package-level `zynnova.__init__`
-- `zynvox.__init__`
-- `zynvista.__init__`
-- `zynform.__init__`
-- full `pyproject.toml`
-- full `README.md`
+---
 
-The scientific core and existing public pipelines remain available; the 0.3.0 work adds higher-level capabilities rather than replacing them.
+## 14. Project status
+
+ZynNova is under active development. Public APIs are intended to remain reasonably stable, while frontier generative models, external model repositories, and hosted services will continue to change. Those volatile dependencies should enter through adapters and contracts rather than becoming irreplaceable implementation details inside the core package.
+
+---
+
+## 15. License
+
+See the repository-root `LICENSE`. Third-party models, datasets, and external engines may use different licenses and must be handled under their respective terms.
+
+<p align="right"><a href="#top"><kbd>Back to top</kbd></a> · <a href="#zh-cn"><kbd>中文</kbd></a></p>

@@ -1,5 +1,7 @@
 """FastAPI surface owned by ZynNova, independent of the selected acoustic engine."""
-from __future__ import annotations
+# IMPORTANT: do not enable postponed annotations in this module.
+# The request Pydantic models are intentionally local to create_app();
+# FastAPI must receive the concrete model classes when routes are registered.
 
 from pathlib import Path
 from typing import Any
