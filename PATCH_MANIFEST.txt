@@ -1,8 +1,0 @@
-APPLY_AND_VERIFY.md
-VALIDATION.json
-notebooks/ZynNova_MCS_MCR_Heterogeneous_TetGen_RegionRecovery_v2.ipynb
-scripts/verify_tetgen_region_recovery.py
-src/zynnova/zynmorph/__init__.py
-src/zynnova/zynmorph/freeform.py
-src/zynnova/zynmorph/region_recovery.py
-tests/zynnova/test_tetgen_region_recovery.py
